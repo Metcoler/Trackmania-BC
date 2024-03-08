@@ -1,0 +1,10 @@
+[meta]
+name = "get_data_driver"
+author = "TMLR"
+category = "Data getter"
+version = "0.2"
+
+[script]
+dependencies = [ "VehicleState"]
+timeout = 0
+

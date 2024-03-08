@@ -1,0 +1,8 @@
+RoadTechStart;14,9,21;North
+RoadTechStraight;14,9,22;North
+RoadTechStraight;14,9,23;North
+RoadTechCurve1;14,9,24;South
+RoadTechCheckpoint;15,9,24;West
+RoadTechStraight;16,9,24;West
+RoadTechStraight;17,9,24;West
+RoadTechFinish;18,9,24;West
