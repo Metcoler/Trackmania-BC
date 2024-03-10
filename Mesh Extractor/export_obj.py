@@ -64,9 +64,9 @@ def transform_final_pos(ps, qs):
             z += p.z
 
     # convert in blender space
-    return (x, -z, y), (q.w, q.x, -q.z, q.y)
+    # return (x, -z, y), (q.w, q.x, -q.z, q.y)
     # No? because Blender default obj import is -Z/Y
-    # return (x, y, z), (q.x, q.y, q.z, q.w)
+    return (x, y, z), (q.x, q.y, q.z, q.w)
 
 
 def transform_pos(pos, ps, qs, blender_space):
@@ -100,7 +100,7 @@ def export_obj(
     lod=1,
     pos=None,
     rot=None,
-    blender_space=False,
+    blender_space=True,
 ):
     N = len(vertices)
 

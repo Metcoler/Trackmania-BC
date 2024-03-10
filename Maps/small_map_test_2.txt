@@ -5,3 +5,4 @@ RoadTechCheckpoint;16,9,25;West
 RoadTechStraight;17,9,25;West
 RoadTechStraight;18,9,25;West
 RoadTechFinish;19,9,25;West
+RoadTechStraight;15,11,23;North

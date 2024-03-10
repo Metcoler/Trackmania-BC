@@ -35,7 +35,7 @@ def data_getter_function():
         s.connect(("127.0.0.1", 9002))
         while True:
             data = get_data(s)
-            new_data_recieved = True
+        
 
 if __name__ == "__main__":
     data = {}
@@ -55,7 +55,7 @@ if __name__ == "__main__":
         while True:
             
             data = get_data(s)
-
+            
             """  
             image = camera.grab()
             if image is None:
@@ -74,7 +74,8 @@ if __name__ == "__main__":
                 time_passed = 0.01
             fps = 1 / time_passed
             start_time = time()  
-            print(data['x'], data['y'], data['z'])
+            ##print(data['x'], data['y'], data['z'])
+            print(f"fps: {fps}")
 
 
     cv2.destroyAllWindows()    

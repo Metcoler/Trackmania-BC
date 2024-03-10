@@ -75,12 +75,12 @@ if __name__ == "__main__2":
     app.exec()
 
 if __name__ == "__main__":
-    base_folder = "C:\\Users\\sampu\\Desktop\\Bakalarka\\GameData\\"
-    export_folder = ".\\blocksExport\\"
+    base_folder = "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\GameData\\"
+    export_folder = ".\\Mesh Extractor\\blocksExport\\"
     print(base_folder)
     all_blocks = glob(
         base_folder
-        + r"Stadium\GameCtnBlockInfo\GameCtnBlockInfoClassic\RoadTechStraight.EDClassic.Gbx"
+        + r"Stadium\GameCtnBlockInfo\GameCtnBlockInfoClassic\RoadTechCurve*.EDClassic.Gbx"
     )
     print(len(all_blocks))
 

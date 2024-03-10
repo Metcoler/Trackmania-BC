@@ -82,3 +82,24 @@ C:\Users\sampu\Desktop\Trackmania AI new\Map Extractor C#\obj\Debug\net7.0\refin
 C:\Users\sampu\Desktop\Trackmania AI new\Map Extractor C#\obj\Debug\net7.0\C# test.pdb
 C:\Users\sampu\Desktop\Trackmania AI new\Map Extractor C#\obj\Debug\net7.0\C# test.genruntimeconfig.cache
 C:\Users\sampu\Desktop\Trackmania AI new\Map Extractor C#\obj\Debug\net7.0\ref\C# test.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\C# test.exe
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\C# test.deps.json
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\C# test.runtimeconfig.json
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\C# test.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\C# test.pdb
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\GBX.NET.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\GBX.NET.LZO.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\GBX.NET.PAK.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\bin\Debug\net7.0\TmEssentials.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.csproj.AssemblyReference.cache
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.AssemblyInfoInputs.cache
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.AssemblyInfo.cs
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.csproj.CoreCompileInputs.cache
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.csproj.CopyComplete
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\refint\C# test.dll
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.pdb
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\C# test.genruntimeconfig.cache
+C:\Users\sampu\Desktop\Trackmania-AI\Map Extractor C#\obj\Debug\net7.0\ref\C# test.dll
