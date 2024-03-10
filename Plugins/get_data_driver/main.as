@@ -151,6 +151,23 @@ void Main()
 				continue;
 			}
 
+			CHmsCamera@ camera = Camera::GetCurrentCamera();
+		
+			if(camera is null)
+			{
+				print("Waiting to get camera...");
+				packet_number = 0;
+				yield();
+				continue;
+			}
+
+			print("Camera: " + camera.Location);
+
+	
+
+
+		
+
 
 			// The state is ready.
 			// We can send data to TMRL for this TrackMania frame:

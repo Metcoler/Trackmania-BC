@@ -5,6 +5,6 @@ category = "Data getter"
 version = "0.2"
 
 [script]
-dependencies = [ "VehicleState"]
+dependencies = [ "VehicleState", "Camera"]
 timeout = 0
 

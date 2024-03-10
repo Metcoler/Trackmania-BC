@@ -2,7 +2,6 @@ import trimesh
 import numpy as np
 import trimesh.visual.color
 import time
-from Car import Car
 
 MAP_BLOCK_SIZE = 32
 MAP_GROUND_LEVEL = -8.5*(MAP_BLOCK_SIZE // 2)
@@ -23,6 +22,7 @@ class MapBlock:
     def __init__(self, name, position, direction) -> None:
         print(name, position, direction)
         self.mesh = trimesh.load(f"Meshes/{name}.obj", force="mesh", process=False)
+    
 
         for block_type, color in self.block_colors.items():
             if block_type in name:
@@ -42,8 +42,10 @@ class MapBlock:
 class Map:
     def __init__(self, file_name) -> None:
         self.blocks = []
+        self.scene = trimesh.Scene()
         self.num_blocks = 0
-
+        
+        
         with open(file_name, 'r', encoding="utf-8") as file:
             for line in file:
                 line = line.strip()
@@ -55,34 +57,19 @@ class Map:
 
                 block_position = list(map(int, block_position.split(",")))
                 block_position = [block_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + block_position[1] * MAP_BLOCK_SIZE // 2, block_position[2] * MAP_BLOCK_SIZE]
-                self.blocks.append(MapBlock(block_name, block_position, block_direction[0]))
+                block = MapBlock(block_name, block_position, block_direction[0])
+                self.blocks.append(block)
+                self.scene.add_geometry(block.get_mesh())
                 self.num_blocks += 1
+        self.mesh = self.scene.dump(concatenate=True)
 
+    def callback_function(self, scene: trimesh.Scene):
+        pass
 
     def plot_map(self):
-        self.scene = trimesh.Scene()  
-        for block in self.blocks:
-            self.scene.add_geometry(block.get_mesh())
+        self.scene.show(callback=self.callback_function)
 
-        self.scene.show()
-
-
-def callback_function(scene: trimesh.Scene):
-    car.move()
-
-        
-        
-# Define camera offset (adjust for desired view)
-camera_offset = np.array([10, 5, 10])  
 
 if __name__ == "__main__":
     test_map = Map("Maps/small_map_test_2.txt")
-    car = Car([495.99505615234375, 10.01400089263916, 752.0000610351562])
-
-    # Create Trimesh sceneS
-    scene = trimesh.Scene()
-    scene.add_geometry(car.get_mesh())  
-    for block in test_map.blocks:
-        scene.add_geometry(block.get_mesh())
-
-    scene.show(callback=callback_function)
+    test_map.plot_map()

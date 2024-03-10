@@ -2,83 +2,65 @@ import socket
 from struct import unpack
 import threading
 from time import sleep, time
+import trimesh
+import numpy as np
 
-import cv2
+from Map import Map
+from Car import Car
+
+def callback_function(scene: trimesh.Scene):
+    car.visualize_ray(scene)
+
+def plot_map():
+    game_map.scene.add_geometry(car.get_mesh())
+    game_map.scene.show(callback=callback_function)
 
 
+def print_fps():
+    global start_time
+    dt = time() - start_time
+    if dt == 0:
+        dt = 0.01
+    print(f"FPS: {1/dt}", end="\r")
+    start_time = time()
 
+def update_camera(data):
+    new_direction = [data['dx'], 0, data['dz']]
+    new_direction = new_direction / np.linalg.norm(new_direction)
+    rotation_matrix = trimesh.geometry.align_vectors([0, 0, -1], new_direction)
+    transformation_matrix = trimesh.transformations.translation_matrix([data['x'] -32*data['dx'], data['y']+5, data['z'] -32*data['dz']])
+    game_map.scene.camera_transform = transformation_matrix @ rotation_matrix
 
-def get_data(s: socket.socket):
-    data = dict()
-    data['speed'] = unpack(b'@f', s.recv(4))[0] # speed
-    data['side_speed'] = unpack(b'@f', s.recv(4))[0] # side speed
-    data['distance'] = unpack(b'@f', s.recv(4))[0] # distance
-    data['x'] = unpack(b'@f', s.recv(4))[0] # x
-    data['y'] = unpack(b'@f', s.recv(4))[0] # y
-    data['z'] = unpack(b'@f', s.recv(4))[0] # z
-    data['steer'] = unpack(b'@f', s.recv(4))[0] # steer
-    data['gas'] = unpack(b'@f', s.recv(4))[0] # gas
-    data['brake'] = unpack(b'@f', s.recv(4))[0] # brake
-    data['packet_number'] = unpack(b'@f', s.recv(4))[0] # finish
-    data['gear'] = unpack(b'@f', s.recv(4))[0] # gear
-    data['rpm'] = unpack(b'@f', s.recv(4))[0] # rpm
-    data['dx'] = unpack(b'@f', s.recv(4))[0] # dx
-    data['dy'] = unpack(b'@f', s.recv(4))[0] # dy
-    data['dz'] = unpack(b'@f', s.recv(4))[0] # dz
-    
-    return data
-
-# function that captures data from openplanet    
-def data_getter_function():
-    global data, new_data_recieved
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect(("127.0.0.1", 9002))
-        while True:
-            data = get_data(s)
-        
 
 if __name__ == "__main__":
-    data = {}
-    ##new_data_recieved = False
-    ##data_getter_thread = threading.Thread(target=data_getter_function, daemon=True)
-    ##data_getter_thread.start()
+    game_map = Map("Maps/small_map_test_2.txt")
+    car = Car()
 
-
+    start_time = time() 
+   
     sleep(0.2) # wait for connection
-    
     print("Waiting to recieve some data...")
 
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as inet_socket:
+        print("Trying to connect...")
+        inet_socket.connect(("127.0.0.1", 9002))
+        print("Connected to openplanet")
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect(("127.0.0.1", 9002))
-        start_time = time()
+        window_thread = threading.Thread(target=plot_map, daemon=False)
+        window_thread.start()
+
         while True:
+            data = car.get_data(inet_socket, game_map)
+            ##update_camera(data)
             
-            data = get_data(s)
             
-            """  
-            image = camera.grab()
-            if image is None:
-                continue
+        
             
-            image = cv2.resize(image, (854, 480))
-            cv2.imshow("Game Capture 1", image)
-            key = cv2.waitKey(1)
-
-            if key == ord('q'):  # Press 'q' to quit
+            ##print_fps()
+            
+            if not window_thread.is_alive():
                 break
 
-            """
-            time_passed = time() - start_time
-            if time_passed == 0.0:
-                time_passed = 0.01
-            fps = 1 / time_passed
-            start_time = time()  
-            ##print(data['x'], data['y'], data['z'])
-            print(f"fps: {fps}")
-
-
-    cv2.destroyAllWindows()    
 
 
 
