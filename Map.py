@@ -19,10 +19,15 @@ class MapBlock:
         "Finish": [255, 0, 0],
         "Checkpoint": [0, 0, 255],
     }
-    def __init__(self, name, position, direction) -> None:
+    
+
+    def __init__(self, name: str, position: list[float], direction: str) -> None:
         print(name, position, direction)
         self.mesh = trimesh.load(f"Meshes/{name}.obj", force="mesh", process=False)
-    
+        self.block_size = 1
+
+        if name[-1].isdigit():
+            self.block_size = int(name[-1])
 
         for block_type, color in self.block_colors.items():
             if block_type in name:
@@ -31,7 +36,7 @@ class MapBlock:
                 break
         
         angle = self.direction_dictionary[direction]
-        self.mesh.apply_transform(trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [16, 0, 16]))
+        self.mesh.apply_transform(trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [self.block_size * 16, 0, self.block_size * 16]))
         self.mesh.apply_translation(position)
         
 
@@ -71,5 +76,5 @@ class Map:
 
 
 if __name__ == "__main__":
-    test_map = Map("Maps/small_map_test_2.txt")
+    test_map = Map("Maps/AI Training.txt")
     test_map.plot_map()

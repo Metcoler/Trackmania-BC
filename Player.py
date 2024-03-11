@@ -4,39 +4,37 @@ import threading
 from time import sleep, time
 import trimesh
 import numpy as np
-
 from Map import Map
 from Car import Car
 
 def callback_function(scene: trimesh.Scene):
     car.visualize_ray(scene)
+    car.update_model_view()
+    car.update_camera(scene)
+
 
 def plot_map():
     game_map.scene.add_geometry(car.get_mesh())
     game_map.scene.show(callback=callback_function)
 
 
-def print_fps():
-    global start_time
-    dt = time() - start_time
+def print_fps(frame: int):
+    global start_time_fps
+    if frame % 100 != 0:
+        return
+    
+    dt = time() - start_time_fps
     if dt == 0:
         dt = 0.01
-    print(f"FPS: {1/dt}", end="\r")
-    start_time = time()
+    print(f"FPS: {(100/dt):02f}", end="\r")
+    start_time_fps = time()
 
-def update_camera(data):
-    new_direction = [data['dx'], 0, data['dz']]
-    new_direction = new_direction / np.linalg.norm(new_direction)
-    rotation_matrix = trimesh.geometry.align_vectors([0, 0, -1], new_direction)
-    transformation_matrix = trimesh.transformations.translation_matrix([data['x'] -32*data['dx'], data['y']+5, data['z'] -32*data['dz']])
-    game_map.scene.camera_transform = transformation_matrix @ rotation_matrix
 
 
 if __name__ == "__main__":
-    game_map = Map("Maps/small_map_test_2.txt")
+    game_map = Map("Maps/AI Training.txt")
     car = Car()
-
-    start_time = time() 
+    start_time_fps = time() 
    
     sleep(0.2) # wait for connection
     print("Waiting to recieve some data...")
@@ -48,18 +46,14 @@ if __name__ == "__main__":
 
         window_thread = threading.Thread(target=plot_map, daemon=False)
         window_thread.start()
-
+        frame = 0
         while True:
             data = car.get_data(inet_socket, game_map)
-            ##update_camera(data)
             
-            
-        
-            
-            ##print_fps()
-            
+            print_fps(frame)
+            frame += 1
             if not window_thread.is_alive():
-                break
+               break
 
 
 
