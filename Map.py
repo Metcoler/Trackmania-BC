@@ -36,22 +36,32 @@ class MapBlock:
                 break
         
         angle = self.direction_dictionary[direction]
+
+        ##self.mesh.apply_scale([1, 1, 1])
         self.mesh.apply_transform(trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [self.block_size * 16, 0, self.block_size * 16]))
         self.mesh.apply_translation(position)
+        
+        self.center = list(self.mesh.centroid)
+        self.center[1] += 5
+        self.center_mesh = trimesh.creation.box(extents=[1, 1, 1], transform=trimesh.transformations.translation_matrix(self.center))
+        self.center_mesh.visual.vertex_colors = [255, 0, 0]
+
         
 
     def get_mesh(self):
         return self.mesh
+    
+    def get_center_mesh(self):
+        return self.center_mesh
         
         
 class Map:
-    def __init__(self, file_name) -> None:
-        self.blocks = []
-        self.scene = trimesh.Scene()
+    def __init__(self, map_name) -> None:
+        self.blocks: list[MapBlock] = []
         self.num_blocks = 0
         
-        
-        with open(file_name, 'r', encoding="utf-8") as file:
+        scene = trimesh.Scene()
+        with open(f"{map_name}.txt", 'r', encoding="utf-8") as file:
             for line in file:
                 line = line.strip()
                 if len(line) == 0:
@@ -64,17 +74,24 @@ class Map:
                 block_position = [block_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + block_position[1] * MAP_BLOCK_SIZE // 2, block_position[2] * MAP_BLOCK_SIZE]
                 block = MapBlock(block_name, block_position, block_direction[0])
                 self.blocks.append(block)
-                self.scene.add_geometry(block.get_mesh())
-                self.num_blocks += 1
-        self.mesh = self.scene.dump(concatenate=True)
+                
+                scene.add_geometry(block.get_mesh())
+                scene.add_geometry(block.get_center_mesh())
 
-    def callback_function(self, scene: trimesh.Scene):
-        pass
+                self.num_blocks += 1
+
+        self.mesh = scene.dump(concatenate=True)
+        self.mesh.export(f"{map_name}.obj")
+
+    def get_mesh(self):
+        return self.mesh
 
     def plot_map(self):
-        self.scene.show(callback=self.callback_function)
+        scene = trimesh.Scene()
+        scene.add_geometry(self.mesh)
+        scene.show()
 
 
 if __name__ == "__main__":
-    test_map = Map("Maps/AI Training.txt")
+    test_map = Map("Maps/small_map_test_2")
     test_map.plot_map()

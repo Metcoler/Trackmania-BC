@@ -117,7 +117,9 @@ void Main()
 				yield();
 				continue;
 			}
+	
 			
+
 			CSceneVehicleVis@ vis = VehicleState::GetVis(GetApp().GameScene, player);
 			if(vis is null)
 			{
@@ -140,41 +142,19 @@ void Main()
 			if (race_state == SGamePlaygroundUIConfig::EUISequence::EndRound) {
 				print("Waiting for player start...");
 				packet_number = 0;
-				yield();
-				continue;
+				yield();				continue;
 			}
-
-			if (race_state == CGamePlaygroundUIConfig::EUISequence::Finish) {
-				print("End of track...");
-				packet_number = 0;
-				yield();
-				continue;
-			}
-
-			CHmsCamera@ camera = Camera::GetCurrentCamera();
+			
+			
 		
-			if(camera is null)
-			{
-				print("Waiting to get camera...");
-				packet_number = 0;
-				yield();
-				continue;
-			}
-
-			print("Camera: " + camera.Location);
-
-	
-
-
-		
-
+			
 
 			// The state is ready.
 			// We can send data to TMRL for this TrackMania frame:
-			print("Sending data: " + packet_number);
+			print("Sending data: " + packet_number++);
 		
 
-
+			
 			
 			// distance update
 			if (previous_x == 0 && previous_y == 0 && previous_z == 0) {
@@ -192,6 +172,13 @@ void Main()
 			previous_y = state.Position.y;
 			previous_z = state.Position.z;
 		
+			// get player time 
+			float time = (GetApp().PlaygroundScript.Now - player.StartTime) / 1000.0;
+
+			// TODO: detect crash
+			
+
+
 			// place cursor at the beginning of the buffer to erase previous data:
 			buf.Seek(0, 0);
 			
@@ -228,9 +215,9 @@ void Main()
 			
 			// can use CGamePlaygroundUIConfig::EUISequence::Finish or CGameTerminal::ESGamePlaygroundUIConfig__EUISequence::Finish
 			
-			//if(race_state == SGamePlaygroundUIConfig::EUISequence::Finish) buf.Write(1.0f);
-            //else buf.Write(0.0f);
-			append_float(buf, packet_number++);
+			if (race_state == CGamePlaygroundUIConfig::EUISequence::Finish) buf.Write(1.0f);
+            else buf.Write(0.0f);
+
 			
 			//buf.Write(api.EngineCurGear);
 			append_float(buf, state.CurGear);
@@ -246,6 +233,9 @@ void Main()
 			
 			//buf.Write(api.AimDirection.z)
 			append_float(buf, state.Dir.z);
+
+			//buf.Write(api.time)
+			append_float(buf, time);
 
 
 
