@@ -6,7 +6,7 @@ from Map import Map
 
 
 class Car:
-    NUM_LASERS = 15
+    NUM_LASERS = 10
     ANGLE = 180
     def __init__(self, position=[0, 0, 0], direction=[1, 0, 0]) -> None:
         self.position = np.array(position)

@@ -56,12 +56,14 @@ class MapBlock:
         
         
 class Map:
+    PATH = "Maps/ExportedBlocks/"
     def __init__(self, map_name) -> None:
+
         self.blocks: list[MapBlock] = []
         self.num_blocks = 0
         
         scene = trimesh.Scene()
-        with open(f"{map_name}.txt", 'r', encoding="utf-8") as file:
+        with open(f"{Map.PATH}{map_name}.txt", 'r', encoding="utf-8") as file:
             for line in file:
                 line = line.strip()
                 if len(line) == 0:
@@ -81,7 +83,7 @@ class Map:
                 self.num_blocks += 1
 
         self.mesh = scene.dump(concatenate=True)
-        self.mesh.export(f"{map_name}.obj")
+        self.mesh.export(f"Maps/Meshes/{map_name}.obj")
 
     def get_mesh(self):
         return self.mesh
@@ -93,5 +95,5 @@ class Map:
 
 
 if __name__ == "__main__":
-    test_map = Map("Maps/small_map_test_2")
+    test_map = Map("AI Training")
     test_map.plot_map()

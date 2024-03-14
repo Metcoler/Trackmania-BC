@@ -39,7 +39,7 @@ def print_fps(frame: int):
 if __name__ == "__main__":
     vizualize = True
     
-    game_map = Map("Maps/small_map_test_2")
+    game_map = Map("small_map_test_2")
     car = Car()
     start_time_fps = time()
     start_time_rendering = time()
