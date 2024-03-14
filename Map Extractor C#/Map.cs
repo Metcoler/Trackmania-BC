@@ -30,6 +30,7 @@ class Map {
             file.Write(block.Name + ";");
             file.Write(block.Coord.X + "," + block.Coord.Y + "," + block.Coord.Z + ";");
             file.WriteLine(block.Direction);
+            
         }
         file.Close();
     }
