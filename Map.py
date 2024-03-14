@@ -95,5 +95,5 @@ class Map:
 
 
 if __name__ == "__main__":
-    test_map = Map("AI Training")
+    test_map = Map("small_map")
     test_map.plot_map()

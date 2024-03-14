@@ -22,7 +22,7 @@ class RacingGameEnviroment(gym.Env):
         
         # Create the car and the map
         self.car = Car()
-        self.map = Map("Maps/small_map_test_2")
+        self.map = Map("small_map")
 
         # Gamepad
         self.controller = vgamepad.VX360Gamepad()
