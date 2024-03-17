@@ -9,7 +9,7 @@ from Car import Car
 def callback_function(scene: trimesh.Scene):
     # Callback function is called every frame of visualization
     global start_time_rendering
-    if time() - start_time_rendering < 0.1:
+    if time() - start_time_rendering < 0.0:
         return
     start_time_rendering = time()
     car.visualize_ray(scene)
@@ -21,7 +21,8 @@ def plot_map():
     # Create a scene with the car and the map
     scene = trimesh.Scene()
     scene.add_geometry(car.get_mesh())
-    scene.add_geometry(game_map.get_mesh())
+    scene.add_geometry(game_map.get_walls_mesh())
+    scene.add_geometry(game_map.get_road_mesh())
     scene.show(callback=callback_function)
 
 
@@ -39,36 +40,31 @@ def print_fps(frame: int):
 
 
 
-if __name__ == "__main__":
-    vizualize = True
+if __name__ == "__main__":  
+    map_name = "AI Training #3"
+    vizualize = False
     
-    game_map = Map("small_map")
-    car = Car()
+    game_map = Map(map_name)
+    car = Car(game_map)
 
     # Time variables
     start_time_fps = time()
     start_time_rendering = time()
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as inet_socket:
-        # Connect to the openplanet plugin
-        print("Trying to connect...")
-        inet_socket.connect(("127.0.0.1", 9002))
-        print("Connected to openplanet")
+    
+    # Start the visualization thread
+    if vizualize:
+        window_thread = threading.Thread(target=plot_map, daemon=True)
+        window_thread.start()
 
-        # Start the visualization thread
-        if vizualize:
-            window_thread = threading.Thread(target=plot_map, daemon=True)
-            window_thread.start()
-
-        # Start the data collection loop
-        frame = 0
-        while True:
-            data = car.get_data(inet_socket, game_map)
-            
-            print_fps(frame)
-            frame += 1
-            if vizualize and not window_thread.is_alive():
-               break
+    # Start the data collection loop
+    frame = 0
+    while True:
+        distances, data_dictionary = car.get_data()
+        print_fps(frame)
+        frame += 1
+        if vizualize and not window_thread.is_alive():
+            break
 
 
 

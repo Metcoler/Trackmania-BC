@@ -1,16 +1,19 @@
 import socket
 from struct import unpack
 import trimesh
-import numpy as np 
+import numpy as np
+import threading
+
 from Map import Map
 
 
 class Car:
-    NUM_LASERS = 30
+    NUM_LASERS = 15
     ANGLE = 180
-    def __init__(self, position=[0, 0, 0], direction=[1, 0, 0]) -> None:
-        self.position = np.array(position)
-        self.direction = np.array(direction)
+    def __init__(self, game_map: Map) -> None:
+        self.position = np.array(game_map.get_start_position())
+        self.direction = np.array(game_map.get_start_direction())
+        self.game_map = game_map
         self.speed = 0
         self.side_speed = 0
         self.distance_traveled = 0
@@ -19,18 +22,28 @@ class Car:
         self.last_direction = self.direction
 
         self.mesh = trimesh.creation.box(extents=[5, 1, 3], tag="car")
+        rotation_matrix = trimesh.geometry.align_vectors([1, 0, 0], self.direction)
+        self.mesh.apply_transform(rotation_matrix)
+        self.mesh.apply_translation(self.position)
         self.mesh.visual.vertex_colors = [0, 0, 0]
 
         self.distances = [0 for _ in range(Car.NUM_LASERS)]
         self.rays_directions = [[1, 0, 0] for _ in range(Car.NUM_LASERS)]
         self.intersections = [[0, 0, 0] for _ in range(Car.NUM_LASERS)]
+
+    
+        self.ray_finder = trimesh.ray.ray_triangle.RayMeshIntersector(self.game_map.get_walls_mesh())
+
+        self.data = None
+        self.thread = threading.Thread(target=self.data_getter_thread, daemon=True)
+        self.thread.start()
     
 
     def get_mesh(self):
         return self.mesh
 
     def update_model_view(self):
-        self.mesh.apply_translation([-self.last_position[0], -self.last_position[1], -self.last_position[2]])
+        self.mesh.apply_translation(-self.last_position)
 
         rotation_matrix = trimesh.geometry.align_vectors(self.last_direction, self.direction)
         self.mesh.apply_transform(rotation_matrix)
@@ -64,9 +77,37 @@ class Car:
         # Set the camera transformation in the scene
         scene.camera_transform = transformation_matrix
     
+    def data_getter_thread(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as inet_socket:
+            # Connect to the openplanet plugin
+            print("Trying to connect...")
+            inet_socket.connect(("127.0.0.1", 9002))
+            print("Connected to openplanet")
+            
+            while True:
+                self.data = self.recieve_data_from_openplanet(inet_socket)
 
-    def get_data(self, s: socket.socket, game_map: Map):
+    def get_data(self):
+        while self.data is None:
+            pass
+        data = self.data
+
+        self.direction = np.array([data['dx'], 0, data['dz']])
+        self.direction = self.direction / np.linalg.norm(self.direction)
+
+        self.position = np.array([data['x'], data['y'], data['z']])
+        self.speed = data['speed']
+        self.side_speed = data['side_speed']
+        self.distance_traveled = data['distance']
+
+        self.generate_laser_directions(Car.ANGLE)
+        self.find_closest_intersections()
+        return self.distances, data
+
+    def recieve_data_from_openplanet(self, s: socket.socket):
         data = dict()
+
+        ## Wait for newest data
         data['speed'] = unpack(b'@f', s.recv(4))[0] # speed
         data['side_speed'] = unpack(b'@f', s.recv(4))[0] # side speed
         data['distance'] = unpack(b'@f', s.recv(4))[0] # distance
@@ -84,19 +125,7 @@ class Car:
         data['dz'] = unpack(b'@f', s.recv(4))[0] # dz
         data['time'] = unpack(b'@f', s.recv(4))[0] # time
 
-
-        self.direction = np.array([data['dx'], 0, data['dz']])
-        self.direction = self.direction / np.linalg.norm(self.direction)
-
-        self.position = np.array([data['x'], data['y'], data['z']])
-        self.speed = data['speed']
-        self.side_speed = data['side_speed']
-        self.distance_traveled = data['distance']
-
-        self.generate_laser_directions(Car.ANGLE)
-        self.find_closest_intersections(game_map)
-
-        return np.array(self.distances + self.position.tolist() + self.direction.tolist() + [self.speed, self.side_speed, self.distance_traveled]), data
+        return data
 
     def visualize_ray(self, scene: trimesh.Scene):
         
@@ -109,18 +138,14 @@ class Car:
     
         
     
-    def find_closest_intersections(self, map: Map):
+    def find_closest_intersections(self):
         ray_origin = self.position
 
-        # Construct a Trimesh ray object
-        ray = trimesh.ray.ray_triangle.RayMeshIntersector(map.mesh)
-
         # Perform batch ray intersection test
-        hits = ray.intersects_location(ray_origins=[ray_origin] * Car.NUM_LASERS,
+        hits = self.ray_finder.intersects_location(ray_origins=[ray_origin] * Car.NUM_LASERS,
                                     ray_directions=self.rays_directions,
                                     multiple_hits=False,
-                                    parallel=True
-                                    ,)
+                                    parallel=True)
 
         # Find the closest intersection point for each ray
         num_hits = len(hits[0])

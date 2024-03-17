@@ -45,12 +45,13 @@ void Main()
 		auto sock = sock_serv.Accept();
 
 		print(Time::Now + ": Accepted incoming connection.");
-
+		print("Getting write...");
 		while (!sock.CanWrite())
 		{
 			yield();
 		}
 		print("Socket can write");
+
 		print(Time::Now + ": Connected!");
 		
 		// OpenPlanet can store bytes in a MemoryBuffer:
@@ -142,12 +143,11 @@ void Main()
 			if (race_state == SGamePlaygroundUIConfig::EUISequence::EndRound) {
 				print("Waiting for player start...");
 				packet_number = 0;
-				yield();				continue;
+				yield();				
+				continue;
 			}
-			
-			
-		
-			
+
+					
 
 			// The state is ready.
 			// We can send data to TMRL for this TrackMania frame:
@@ -244,6 +244,7 @@ void Main()
 			buf.Seek(0, 0);
 			
 			cc = send_memory_buffer(sock, buf);
+
 
 			yield();  // this statement stops the script until the next frame
 		}
