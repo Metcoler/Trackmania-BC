@@ -42,6 +42,7 @@ void Main()
 			yield();
 		}
 		print("Socket can read");
+
 		auto sock = sock_serv.Accept();
 
 		print(Time::Now + ": Accepted incoming connection.");
@@ -147,14 +148,11 @@ void Main()
 				continue;
 			}
 
-					
-
+	
+		
 			// The state is ready.
 			// We can send data to TMRL for this TrackMania frame:
 			print("Sending data: " + packet_number++);
-		
-
-			
 			
 			// distance update
 			if (previous_x == 0 && previous_y == 0 && previous_z == 0) {
@@ -174,10 +172,6 @@ void Main()
 		
 			// get player time 
 			float time = (GetApp().PlaygroundScript.Now - player.StartTime) / 1000.0;
-
-			// TODO: detect crash
-			
-
 
 			// place cursor at the beginning of the buffer to erase previous data:
 			buf.Seek(0, 0);

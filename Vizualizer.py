@@ -8,11 +8,7 @@ from Car import Car
 
 def callback_function(scene: trimesh.Scene):
     # Callback function is called every frame of visualization
-    global start_time_rendering
-    if time() - start_time_rendering < 0.0:
-        return
-    start_time_rendering = time()
-    car.visualize_ray(scene)
+    car.visualize_rays(scene)
     car.update_model_view()
     car.update_camera(scene)
 
@@ -23,6 +19,8 @@ def plot_map():
     scene.add_geometry(car.get_mesh())
     scene.add_geometry(game_map.get_walls_mesh())
     scene.add_geometry(game_map.get_road_mesh())
+    scene.add_geometry(game_map.get_path_line_mesh())
+    scene.add_geometry(game_map.get_path_points_mesh())
     scene.show(callback=callback_function)
 
 
@@ -35,22 +33,20 @@ def print_fps(frame: int):
     dt = time() - start_time_fps
     if dt == 0:
         dt = 0.01
-    print(f"FPS: {(100/dt):02f}", end="\r")
+    #print(f"FPS: {(100/dt):02f}", end="\r")
     start_time_fps = time()
 
 
 
 if __name__ == "__main__":  
-    map_name = "AI Training #3"
-    vizualize = False
-    
+    #map_name = "AI Training #2"
+    map_name = "small_map"
+    vizualize = True
+
     game_map = Map(map_name)
     car = Car(game_map)
 
-    # Time variables
     start_time_fps = time()
-    start_time_rendering = time()
-
     
     # Start the visualization thread
     if vizualize:

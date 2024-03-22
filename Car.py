@@ -3,17 +3,23 @@ from struct import unpack
 import trimesh
 import numpy as np
 import threading
+import time
 
 from Map import Map
+from Map import MAP_BLOCK_SIZE, MAP_GROUND_LEVEL
 
 
 class Car:
     NUM_LASERS = 15
     ANGLE = 180
+    SIGHT_TILES = 10
+
     def __init__(self, game_map: Map) -> None:
         self.position = np.array(game_map.get_start_position())
         self.direction = np.array(game_map.get_start_direction())
         self.game_map = game_map
+
+        self.path_tile_index = 0
         self.speed = 0
         self.side_speed = 0
         self.distance_traveled = 0
@@ -31,10 +37,10 @@ class Car:
         self.rays_directions = [[1, 0, 0] for _ in range(Car.NUM_LASERS)]
         self.intersections = [[0, 0, 0] for _ in range(Car.NUM_LASERS)]
 
-    
         self.ray_finder = trimesh.ray.ray_triangle.RayMeshIntersector(self.game_map.get_walls_mesh())
 
         self.data = None
+        self.ready = False
         self.thread = threading.Thread(target=self.data_getter_thread, daemon=True)
         self.thread.start()
     
@@ -43,6 +49,7 @@ class Car:
         return self.mesh
 
     def update_model_view(self):
+        ## TODO reset mesh transformation
         self.mesh.apply_translation(-self.last_position)
 
         rotation_matrix = trimesh.geometry.align_vectors(self.last_direction, self.direction)
@@ -83,7 +90,7 @@ class Car:
             print("Trying to connect...")
             inet_socket.connect(("127.0.0.1", 9002))
             print("Connected to openplanet")
-            
+            self.ready = True
             while True:
                 self.data = self.recieve_data_from_openplanet(inet_socket)
 
@@ -91,6 +98,9 @@ class Car:
         while self.data is None:
             pass
         data = self.data
+
+        if data["time"] < 0:
+            self.reset()
 
         self.direction = np.array([data['dx'], 0, data['dz']])
         self.direction = self.direction / np.linalg.norm(self.direction)
@@ -100,14 +110,47 @@ class Car:
         self.side_speed = data['side_speed']
         self.distance_traveled = data['distance']
 
+        if False:
+            self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
+            if len(self.next_tiles) < Car.SIGHT_TILES:
+                self.next_tiles += [self.next_tiles[-1] for _ in range(Car.SIGHT_TILES - len(self.next_tiles))]
+            
         self.generate_laser_directions(Car.ANGLE)
         self.find_closest_intersections()
         return self.distances, data
+    
+    def reset(self):
+        # TODO Reset the car to the start position
+        pass
+
+    
+
+    def update_path_state(self):
+        # Check if the car has reached the next path tile
+        # Returns true if car has reached new tile
+
+        current_tile = self.position // 32
+        current_tile += np.array([0, 9, 0])
+        if all(current_tile == self.game_map.path_tiles[self.path_tile_index]):
+            return False
+
+        if self.path_tile_index < len(self.game_map.path_tiles) and all(current_tile == self.game_map.path_tiles[self.path_tile_index + 1]):
+            self.path_tile_index += 1
+            return True
+            
+        if self.path_tile_index > 0 and all(current_tile == self.game_map.path_tiles[self.path_tile_index - 1]):
+            self.path_tile_index -= 1
+            return True
+        
+        # Probably reset of the car
+        if all(current_tile == self.game_map.start_logical_position):
+            self.path_tile_index = 0
+            return False
+        
 
     def recieve_data_from_openplanet(self, s: socket.socket):
         data = dict()
 
-        ## Wait for newest data
         data['speed'] = unpack(b'@f', s.recv(4))[0] # speed
         data['side_speed'] = unpack(b'@f', s.recv(4))[0] # side speed
         data['distance'] = unpack(b'@f', s.recv(4))[0] # distance
@@ -127,14 +170,18 @@ class Car:
 
         return data
 
-    def visualize_ray(self, scene: trimesh.Scene):
-        
+    def visualize_rays(self, scene: trimesh.Scene):
         for i, ray_end in enumerate(self.intersections):
             scene.delete_geometry(f"ray{i}")
-        
             ray_origin = self.position
             ray_geometry = trimesh.load_path([ray_origin, ray_end])
-            self.ray = scene.add_geometry(ray_geometry, node_name=f"ray{i}")
+            scene.add_geometry(ray_geometry, node_name=f"ray{i}")
+        
+        #for i, next_point in enumerate(self.next_points):
+        #    scene.delete_geometry(f"path{i}")
+        #    line_geometry = trimesh.load_path([self.position, next_point])
+        #    scene.add_geometry(ray_geometry, node_name=f"path{i}")
+
     
         
     

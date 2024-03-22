@@ -42,7 +42,7 @@ class MapBlock:
         self.logical_position = np.array(logical_position)
         self.position = np.array([logical_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + logical_position[1] * MAP_BLOCK_SIZE // 2, logical_position[2] * MAP_BLOCK_SIZE])
         
-        self.mesh = trimesh.load(f"Meshes/{name}.obj", force="mesh", process=False)
+        self.mesh = trimesh.load(f"Meshes/{name}.obj", force="mesh", process=True)
         
         # get block logical size
         self.block_size = 1
@@ -61,14 +61,14 @@ class MapBlock:
         self.mesh.apply_translation(self.position) 
          
         # center
-        self.center_point = list(np.array([16, 0, 16]) + self.position)
+        self.center_point = self.position + np.array([16, 0, 16])
         if self.block_size > 1:
-            self.center_point = list(self.mesh.centroid)
-
-        self.center_point[1] = self.position[1] + 5
+            self.center_point = self.mesh.centroid 
+        self.center_point = list(self.center_point)
+        self.center_point[1] = self.position[1]
         self.center_point = np.array(self.center_point)
         
-        self.find_walls_only()
+        self.split_mesh_into_walls_and_road()
         self.calculate_in_out_points(name, direction)
         self.calculate_in_out_vectors(name, direction)        
         self.generate_mesh_points()
@@ -80,21 +80,20 @@ class MapBlock:
 
     def calculate_in_out_points(self, name, direction):
         # in and out points
-        self.in_title, self.out_title = self.in_out_tiles[name]
-        self.in_title = list(self.in_title * (self.block_size-1)) + [1]
-        self.out_title = list(self.out_title * (self.block_size-1)) + [1]
+        self.in_tile, self.out_tile = self.in_out_tiles[name]
+        self.in_tile = list(self.in_tile * (self.block_size-1)) + [1]
+        self.out_tile = list(self.out_tile * (self.block_size-1)) + [1]
 
         angle = self.direction_dictionary[direction]
         rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [(self.block_size-1)/2, 0, (self.block_size-1)/2])
 
-        self.in_title = np.round(np.array(np.dot(rotation_matrix, self.in_title)[:3])) + self.logical_position
-        self.out_title = np.round(np.array(np.dot(rotation_matrix, self.out_title)[:3])) + self.logical_position
+        self.in_tile = np.round(np.array(np.dot(rotation_matrix, self.in_tile)[:3])) + self.logical_position
+        self.out_tile = np.round(np.array(np.dot(rotation_matrix, self.out_tile)[:3])) + self.logical_position
     
-
-
-        self.in_point = np.array([16+self.in_title[0] * MAP_BLOCK_SIZE, self.center_point[1], 16+self.in_title[2] * MAP_BLOCK_SIZE])
-        self.out_point = np.array([16+self.out_title[0] * MAP_BLOCK_SIZE, self.center_point[1], 16+self.out_title[2] * MAP_BLOCK_SIZE])
-
+        self.in_point = np.array([16+self.in_tile[0] * MAP_BLOCK_SIZE, 10+self.position[1], 16+self.in_tile[2] * MAP_BLOCK_SIZE])
+        self.out_point = np.array([16+self.out_tile[0] * MAP_BLOCK_SIZE, 10+self.position[1], 16+self.out_tile[2] * MAP_BLOCK_SIZE])
+    
+    
     def calculate_in_out_vectors(self, name, direction):
         in_vector, out_vector = self.in_out_directions[name]
         in_vector = list(in_vector) + [0]
@@ -108,15 +107,15 @@ class MapBlock:
 
 
     def swap_in_out(self):
-        self.in_title, self.out_title = self.out_title, self.in_title
+        self.in_tile, self.out_tile = self.out_tile, self.in_tile
         self.in_point, self.out_point = self.out_point, self.in_point
         self.in_vector, self.out_vector = -self.out_vector, -self.in_vector
         self.generate_mesh_points()
     
     def generate_mesh_points(self):
         ## center
-        self.center_mesh = trimesh.creation.box(extents=[1, 1, 1], transform=trimesh.transformations.translation_matrix(self.center_point))
-        self.center_mesh.visual.vertex_colors = [255, 0, 0]
+        self.center_point_mesh = trimesh.creation.box(extents=[1, 1, 1], transform=trimesh.transformations.translation_matrix(self.center_point))
+        self.center_point_mesh.visual.vertex_colors = [255, 0, 0]
 
         # origin point
         self.origin_mesh = trimesh.creation.box(extents=[1, 1, 1], transform=trimesh.transformations.translation_matrix(self.position))
@@ -140,7 +139,7 @@ class MapBlock:
         ray_end = self.out_point + self.out_vector * 10
         self.out_vector_mesh = trimesh.load_path([ray_origin, ray_end], colors=[[255, 0, 0]])
 
-    def find_walls_only(self):
+    def split_mesh_into_walls_and_road(self):
         normals = self.mesh.face_normals
 
         # Find indices of triangles with normals not pointing 
@@ -154,12 +153,16 @@ class MapBlock:
                 road_indices.append(i)
 
 
-        # Create a new mesh with faces not pointing in the y-axis direction
+        # Walls - Create a new mesh with faces not pointing in the y-axis direction
         self.walls_mesh = trimesh.Trimesh(vertices=self.mesh.vertices,
                                     faces=self.mesh.faces[walls_indices])
         self.walls_mesh.visual.vertex_colors = [50, 50, 50]
+        self.walls_mesh.remove_unreferenced_vertices()
+
+        # Road - Create a new mesh with faces pointing in the y-axis direction
         self.road_mesh = trimesh.Trimesh(vertices=self.mesh.vertices,
                                     faces=self.mesh.faces[road_indices])
+        self.road_mesh.remove_unreferenced_vertices()
 
 
     def get_mesh(self):
@@ -172,8 +175,7 @@ class MapBlock:
         return self.walls_mesh
     
     def get_points_mesh(self):
-        return self.in_point_mesh + self.out_point_mesh + self.in_vector_mesh
-
+        return self.in_point_mesh + self.out_point_mesh + self.center_point_mesh
 
     def set_color(self, color: list[int]):
         self.mesh.visual.vertex_colors = color
@@ -181,16 +183,16 @@ class MapBlock:
         self.road_mesh.visual.vertex_colors = color
 
     
-    def get_out_position_vector(self, input_logical_position, input_vector, i=0):
-        if i > 2:
+    def get_out_position_vector(self, input_logical_position, input_vector, try_index=0):
+        if try_index > 1:
             raise Exception("Error: path is not continuous")
-        if all(np.array(input_logical_position == self.in_title)) and all(input_vector == self.in_vector):
-            return self.out_title, self.out_vector
+        if all(np.array(input_logical_position == self.in_tile)) and all(input_vector == self.in_vector):
+            return self.out_tile, self.out_vector
         self.swap_in_out()
-        return self.get_out_position_vector(input_logical_position, input_vector, i+1)
+        return self.get_out_position_vector(input_logical_position, input_vector, try_index+1)
     
-    def contains_in_out_title(self, logical_position):
-        return all(logical_position == self.in_title) or all(logical_position == self.out_title)
+    def contains_in_out_tile(self, logical_position):
+        return all(logical_position == self.in_tile) or all(logical_position == self.out_tile)
     
     def __repr__(self) -> str:
         return f"{self.name}{self.block_size if self.block_size > 1 else ''}: {self.logical_position}"
@@ -200,6 +202,7 @@ class Map:
     
     def __init__(self, map_name) -> None:
         print("Creating map...")
+        self.map_name = map_name
         self.blocks: dict[tuple[int], MapBlock] = dict()
         self.start_logical_position = None
         self.end_logical_position = None 
@@ -223,22 +226,11 @@ class Map:
                     self.end_logical_position = logical_position
         
         self.construct_path()
-
-        scene = trimesh.Scene()
-        for block in self.blocks.values():
-            scene.add_geometry(block.get_mesh())
-        self.mesh = scene.dump(concatenate=True)
-        self.mesh.export(f"Maps/Meshes/{map_name}.obj")
-
-        scene = trimesh.Scene()
-        for block in self.blocks.values():
-            scene.add_geometry(block.get_walls_mesh())
-        self.walls_mesh = scene.dump(concatenate=True)
-
-        scene = trimesh.Scene()
-        for block in self.blocks.values():
-            scene.add_geometry(block.get_road_mesh())
-        self.road_mesh = scene.dump(concatenate=True)  
+        self.generate_map_mesh()
+        self.generate_walls_mesh()
+        self.generate_road_mesh()
+        self.generate_path_mesh()
+ 
 
 
 
@@ -250,14 +242,13 @@ class Map:
         in_position = self.start_logical_position
         in_vector = self.blocks[logical_position].out_vector
         
-
         while self.blocks[logical_position].name != "Finish":
 
             out_position, out_vector = self.blocks[logical_position].get_out_position_vector(in_position, in_vector)
             next_in_position = out_position + out_vector
             
             for block in self.blocks.values():
-                if block.contains_in_out_title(next_in_position):
+                if block.contains_in_out_tile(next_in_position):
                 
                     in_position = next_in_position
                     in_vector = out_vector
@@ -265,21 +256,20 @@ class Map:
                     path.append(logical_position)
                     break
             else:
-                print("Error: path is not continuous")
-                break
+                raise Exception("Error: path is not continuous")
+        
         print("Path constructed...")
         self.block_path = path
-        path_points_tmp = []
+        path_tiles_tmp = []
         for block_position in path:
-            path_points_tmp.append(self.blocks[block_position].in_title)
-            path_points_tmp.append(self.blocks[block_position].center_point)
-            path_points_tmp.append(self.blocks[block_position].out_title)
+            path_tiles_tmp.append(self.blocks[block_position].in_tile)
+            path_tiles_tmp.append(self.blocks[block_position].out_tile)
         
-        self.path_points = []
-        for point in path_points_tmp:
-            if self.path_points and all(self.path_points[-1] == point):
+        self.path_tiles = []
+        for tile in path_tiles_tmp:
+            if self.path_tiles and all(self.path_tiles[-1] == tile):
                 continue
-            self.path_points.append(point)
+            self.path_tiles.append(tile)
         
     def get_start_position(self):
         return self.blocks[self.start_logical_position].center_point
@@ -288,15 +278,49 @@ class Map:
         return self.blocks[self.start_logical_position].out_vector
 
     def generate_path_mesh(self):
+
         segments = []
-        for i in range(1, len(self.path_points)):
-            point_from = self.path_points[i-1]
-            point_to = self.path_points[i]
+        points = []
+        for i in range(1, len(self.path_tiles)):
+            tile_from = self.path_tiles[i-1]
+            tile_to = self.path_tiles[i]
+            point_from = np.array([16+tile_from[0] * MAP_BLOCK_SIZE, 2+MAP_GROUND_LEVEL + tile_from[1] * MAP_BLOCK_SIZE // 2, 16+tile_from[2] * MAP_BLOCK_SIZE])
+            point_to = np.array([16+tile_to[0] * MAP_BLOCK_SIZE, 2+MAP_GROUND_LEVEL + tile_to[1] * MAP_BLOCK_SIZE // 2, 16+tile_to[2] * MAP_BLOCK_SIZE])
             segments.append([point_from, point_to])
-        path_mesh = trimesh.load_path(segments)
 
-        return path_mesh
+            if i == 1:
+                points.append(point_from)
+            points.append(point_to)
+        self.path_line_mesh = trimesh.load_path(segments)
 
+        points_mesh = trimesh.Trimesh()
+        for point in points:
+            point_mesh = trimesh.creation.box(extents=[1, 1, 1], transform=trimesh.transformations.translation_matrix(point + np.array([0, 0.5, 0])))
+            point_mesh.visual.vertex_colors = [0, 255, 255]
+            points_mesh += point_mesh
+        self.path_points_mesh = points_mesh
+
+    def generate_map_mesh(self):
+        # Create a mesh of the map
+        scene = trimesh.Scene()
+        for block in self.blocks.values():
+            scene.add_geometry(block.get_mesh())
+        self.mesh = scene.dump(concatenate=True)
+        self.mesh.export(f"Maps/Meshes/{self.map_name}.obj")
+
+    def generate_walls_mesh(self):
+        # Create a mesh of the walls
+        scene = trimesh.Scene()
+        for block in self.blocks.values():
+            scene.add_geometry(block.get_walls_mesh())
+        self.walls_mesh = scene.dump(concatenate=True)
+    
+    def generate_road_mesh(self):
+        # Create a mesh of the road
+        scene = trimesh.Scene()
+        for block in self.blocks.values():
+            scene.add_geometry(block.get_road_mesh())
+        self.road_mesh = scene.dump(concatenate=True) 
 
 
     def get_mesh(self):
@@ -307,6 +331,12 @@ class Map:
     
     def get_road_mesh(self):
         return self.road_mesh
+    
+    def get_path_line_mesh(self):
+        return self.path_line_mesh
+    
+    def get_path_points_mesh(self):
+        return self.path_points_mesh
 
     def plot_map(self):
         scene = trimesh.Scene()
@@ -315,18 +345,19 @@ class Map:
             scene.add_geometry(block.get_road_mesh())
             scene.add_geometry(block.get_walls_mesh())
             #block.generate_mesh_points()
-            #scene.add_geometry(block.get_mesh())
+            #scene.add_geometry(block.get_points_mesh())
             #scene.add_geometry(block.center_mesh)
             #scene.add_geometry(block.in_point_mesh)
             #scene.add_geometry(block.out_point_mesh)        
             #scene.add_geometry(block.in_vector_mesh)
             #scene.add_geometry(block.out_vector_mesh)
-        #scene.add_geometry(self.generate_path_mesh())
+        scene.add_geometry(self.get_path_line_mesh())
+        scene.add_geometry(self.get_path_points_mesh())
            
         scene.show()
 
 
 
 if __name__ == "__main__":
-    test_map = Map("AI Training #3")
+    test_map = Map("AI Training #2")
     test_map.plot_map()
