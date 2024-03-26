@@ -120,7 +120,6 @@ void Main()
 				continue;
 			}
 	
-			
 
 			CSceneVehicleVis@ vis = VehicleState::GetVis(GetApp().GameScene, player);
 			if(vis is null)
@@ -172,6 +171,10 @@ void Main()
 		
 			// get player time 
 			float time = (GetApp().PlaygroundScript.Now - player.StartTime) / 1000.0;
+
+			// TODO detect car crashing 	
+			
+		
 
 			// place cursor at the beginning of the buffer to erase previous data:
 			buf.Seek(0, 0);

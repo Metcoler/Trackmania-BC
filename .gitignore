@@ -3,3 +3,4 @@ Mesh Extractor/blocksExport/
 __pycache__/
 Map Extractor C#/bin/
 Map Extractor C#/obj/
+logs/PPO*

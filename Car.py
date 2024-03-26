@@ -36,20 +36,22 @@ class Car:
         self.distances = [0 for _ in range(Car.NUM_LASERS)]
         self.rays_directions = [[1, 0, 0] for _ in range(Car.NUM_LASERS)]
         self.intersections = [[0, 0, 0] for _ in range(Car.NUM_LASERS)]
+        self.next_tiles = [game_map.start_logical_position for _ in range(Car.SIGHT_TILES)]
+        self.next_points = list(map(Map.tile_coordinate_to_point, self.next_tiles))
 
         self.ray_finder = trimesh.ray.ray_triangle.RayMeshIntersector(self.game_map.get_walls_mesh())
 
         self.data = None
         self.ready = False
+        self.new_data = False
         self.thread = threading.Thread(target=self.data_getter_thread, daemon=True)
         self.thread.start()
-    
 
     def get_mesh(self):
         return self.mesh
 
     def update_model_view(self):
-        ## TODO reset mesh transformation
+        ## TODO Fix car mesh transformation bug
         self.mesh.apply_translation(-self.last_position)
 
         rotation_matrix = trimesh.geometry.align_vectors(self.last_direction, self.direction)
@@ -92,12 +94,16 @@ class Car:
             print("Connected to openplanet")
             self.ready = True
             while True:
-                self.data = self.recieve_data_from_openplanet(inet_socket)
+                self.data, self.new_data = self.recieve_data_from_openplanet(inet_socket)
+
+
 
     def get_data(self):
-        while self.data is None:
-            pass
-        data = self.data
+        while self.data is None or not self.new_data:
+            time.sleep(0.001)
+
+        data, self.new_data = self.data, False
+
 
         if data["time"] < 0:
             self.reset()
@@ -109,14 +115,31 @@ class Car:
         self.speed = data['speed']
         self.side_speed = data['side_speed']
         self.distance_traveled = data['distance']
+    
 
-        if False:
+        delta_tile = self.update_path_state()
+        data['map_progress'] = delta_tile
+
+        try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
-            if len(self.next_tiles) < Car.SIGHT_TILES:
-                self.next_tiles += [self.next_tiles[-1] for _ in range(Car.SIGHT_TILES - len(self.next_tiles))]
-            
+        except IndexError:
+            self.next_tiles = []
+        if len(self.next_tiles) == 0:
+            self.next_tiles = [self.game_map.end_logical_position]
+
+        if len(self.next_tiles) < Car.SIGHT_TILES:
+            self.next_tiles += [self.next_tiles[-1] for _ in range(Car.SIGHT_TILES - len(self.next_tiles))]
+        
+        self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
+        next_point_direction = self.next_points[1] - self.next_points[0]
+        next_point_direction = next_point_direction / np.linalg.norm(next_point_direction)
+        
+        dot_product = np.dot(next_point_direction, self.direction)
+        
+        data['next_point_direction'] = dot_product
         self.generate_laser_directions(Car.ANGLE)
         self.find_closest_intersections()
+        print(dot_product, end='\r')
         return self.distances, data
     
     def reset(self):
@@ -127,25 +150,25 @@ class Car:
 
     def update_path_state(self):
         # Check if the car has reached the next path tile
-        # Returns true if car has reached new tile
 
         current_tile = self.position // 32
         current_tile += np.array([0, 9, 0])
         if all(current_tile == self.game_map.path_tiles[self.path_tile_index]):
-            return False
+            return 0
 
-        if self.path_tile_index < len(self.game_map.path_tiles) and all(current_tile == self.game_map.path_tiles[self.path_tile_index + 1]):
+        if self.path_tile_index < len(self.game_map.path_tiles) - 1 and all(current_tile == self.game_map.path_tiles[self.path_tile_index + 1]):
             self.path_tile_index += 1
-            return True
+            return 1
             
         if self.path_tile_index > 0 and all(current_tile == self.game_map.path_tiles[self.path_tile_index - 1]):
             self.path_tile_index -= 1
-            return True
+            return -1
         
         # Probably reset of the car
         if all(current_tile == self.game_map.start_logical_position):
             self.path_tile_index = 0
-            return False
+            return 0
+        return 0
         
 
     def recieve_data_from_openplanet(self, s: socket.socket):
@@ -167,8 +190,7 @@ class Car:
         data['dy'] = unpack(b'@f', s.recv(4))[0] # dy
         data['dz'] = unpack(b'@f', s.recv(4))[0] # dz
         data['time'] = unpack(b'@f', s.recv(4))[0] # time
-
-        return data
+        return data, True
 
     def visualize_rays(self, scene: trimesh.Scene):
         for i, ray_end in enumerate(self.intersections):
@@ -177,10 +199,11 @@ class Car:
             ray_geometry = trimesh.load_path([ray_origin, ray_end])
             scene.add_geometry(ray_geometry, node_name=f"ray{i}")
         
-        #for i, next_point in enumerate(self.next_points):
-        #    scene.delete_geometry(f"path{i}")
-        #    line_geometry = trimesh.load_path([self.position, next_point])
-        #    scene.add_geometry(ray_geometry, node_name=f"path{i}")
+        for i, next_point in enumerate(self.next_points):
+            scene.delete_geometry(f"path{i}")
+            line_geometry = trimesh.load_path([self.position, next_point], colors=[[255, 0, 255]])
+            
+            scene.add_geometry(line_geometry, node_name=f"path{i}")
 
     
         

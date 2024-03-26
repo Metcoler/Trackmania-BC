@@ -76,7 +76,7 @@ class MapBlock:
         # color the mesh
         if name in MapBlock.block_colors:
             self.set_color(MapBlock.block_colors[name])
-            
+
 
     def calculate_in_out_points(self, name, direction):
         # in and out points
@@ -90,8 +90,8 @@ class MapBlock:
         self.in_tile = np.round(np.array(np.dot(rotation_matrix, self.in_tile)[:3])) + self.logical_position
         self.out_tile = np.round(np.array(np.dot(rotation_matrix, self.out_tile)[:3])) + self.logical_position
     
-        self.in_point = np.array([16+self.in_tile[0] * MAP_BLOCK_SIZE, 10+self.position[1], 16+self.in_tile[2] * MAP_BLOCK_SIZE])
-        self.out_point = np.array([16+self.out_tile[0] * MAP_BLOCK_SIZE, 10+self.position[1], 16+self.out_tile[2] * MAP_BLOCK_SIZE])
+        self.in_point = np.array([16+self.in_tile[0] * MAP_BLOCK_SIZE, self.position[1], 16+self.in_tile[2] * MAP_BLOCK_SIZE])
+        self.out_point = np.array([16+self.out_tile[0] * MAP_BLOCK_SIZE, self.position[1], 16+self.out_tile[2] * MAP_BLOCK_SIZE])
     
     
     def calculate_in_out_vectors(self, name, direction):
@@ -222,17 +222,21 @@ class Map:
 
                 if "Start" in block_name:
                     self.start_logical_position = logical_position
-                elif "End" in logical_position:
+                elif "Finish" in block_name:
                     self.end_logical_position = logical_position
+
         
         self.construct_path()
         self.generate_map_mesh()
         self.generate_walls_mesh()
         self.generate_road_mesh()
         self.generate_path_mesh()
- 
 
-
+    def tile_coordinate_to_point(logical_position, middle=True, dy=0):
+        position = np.array([logical_position[0] * MAP_BLOCK_SIZE, dy + MAP_GROUND_LEVEL + logical_position[1] * MAP_BLOCK_SIZE // 2, logical_position[2] * MAP_BLOCK_SIZE])
+        if middle:
+            position += np.array([MAP_BLOCK_SIZE / 2, 0, MAP_BLOCK_SIZE / 2])
+        return position
 
         
     def construct_path(self):
@@ -270,7 +274,12 @@ class Map:
             if self.path_tiles and all(self.path_tiles[-1] == tile):
                 continue
             self.path_tiles.append(tile)
-        
+        print("Path tiles constructed...")
+        print("Path length:", len(self.path_tiles))
+    
+    def estimated_path_lenght(self):
+        return len(self.path_tiles) * MAP_BLOCK_SIZE
+
     def get_start_position(self):
         return self.blocks[self.start_logical_position].center_point
     
@@ -284,8 +293,8 @@ class Map:
         for i in range(1, len(self.path_tiles)):
             tile_from = self.path_tiles[i-1]
             tile_to = self.path_tiles[i]
-            point_from = np.array([16+tile_from[0] * MAP_BLOCK_SIZE, 2+MAP_GROUND_LEVEL + tile_from[1] * MAP_BLOCK_SIZE // 2, 16+tile_from[2] * MAP_BLOCK_SIZE])
-            point_to = np.array([16+tile_to[0] * MAP_BLOCK_SIZE, 2+MAP_GROUND_LEVEL + tile_to[1] * MAP_BLOCK_SIZE // 2, 16+tile_to[2] * MAP_BLOCK_SIZE])
+            point_from = Map.tile_coordinate_to_point(tile_from, dy=2)
+            point_to = Map.tile_coordinate_to_point(tile_to, dy=2)
             segments.append([point_from, point_to])
 
             if i == 1:
@@ -359,5 +368,5 @@ class Map:
 
 
 if __name__ == "__main__":
-    test_map = Map("AI Training #2")
+    test_map = Map("small_map")
     test_map.plot_map()
