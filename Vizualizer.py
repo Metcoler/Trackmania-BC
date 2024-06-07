@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # Start the data collection loop
     frame = 0
     while True:
-        distances, data_dictionary = car.get_data()
+        distances, instructions, data_dictionary = car.get_data()
         print_fps(frame)
         frame += 1
         if vizualize and not window_thread.is_alive():

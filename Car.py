@@ -119,28 +119,39 @@ class Car:
 
         delta_tile = self.update_path_state()
         data['map_progress'] = delta_tile
-
+        data['total_progress'] = (self.path_tile_index / len(self.game_map.path_tiles)) * 100
+        print("=====")
         try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
+            self.next_instructions = self.game_map.path_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
         except IndexError:
             self.next_tiles = []
+            self.next_instructions = []
+        
         if len(self.next_tiles) == 0:
             self.next_tiles = [self.game_map.end_logical_position]
+        
+        if len(self.next_instructions) == 0:
+            self.next_instructions = [0]
 
         if len(self.next_tiles) < Car.SIGHT_TILES:
             self.next_tiles += [self.next_tiles[-1] for _ in range(Car.SIGHT_TILES - len(self.next_tiles))]
         
+        if len(self.next_instructions) < Car.SIGHT_TILES:
+            self.next_instructions += [self.next_instructions[-1] for _ in range(Car.SIGHT_TILES - len(self.next_instructions))]
+
+        print("tiles",len(self.next_tiles))
+        print("instuctions",len(self.next_instructions))
         self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
         next_point_direction = self.next_points[1] - self.next_points[0]
         next_point_direction = next_point_direction / np.linalg.norm(next_point_direction)
-        
+
         dot_product = np.dot(next_point_direction, self.direction)
         
         data['next_point_direction'] = dot_product
         self.generate_laser_directions(Car.ANGLE)
         self.find_closest_intersections()
-        print(dot_product, end='\r')
-        return self.distances, data
+        return self.distances, self.next_instructions, data
     
     def reset(self):
         # TODO Reset the car to the start position
@@ -196,14 +207,14 @@ class Car:
         for i, ray_end in enumerate(self.intersections):
             scene.delete_geometry(f"ray{i}")
             ray_origin = self.position
-            ray_geometry = trimesh.load_path([ray_origin, ray_end])
+            ray_geometry = trimesh.load_path([ray_origin, ray_end], colors=[[0, 0, 255]])
             scene.add_geometry(ray_geometry, node_name=f"ray{i}")
         
-        for i, next_point in enumerate(self.next_points):
-            scene.delete_geometry(f"path{i}")
-            line_geometry = trimesh.load_path([self.position, next_point], colors=[[255, 0, 255]])
-            
-            scene.add_geometry(line_geometry, node_name=f"path{i}")
+        # for i, next_point in enumerate(self.next_points):
+        #    scene.delete_geometry(f"path{i}")
+        #    line_geometry = trimesh.load_path([self.position, next_point], colors=[[255, 0, 255]])
+        #    
+        #    scene.add_geometry(line_geometry, node_name=f"path{i}")
 
     
         

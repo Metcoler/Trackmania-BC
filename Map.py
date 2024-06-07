@@ -275,7 +275,20 @@ class Map:
                 continue
             self.path_tiles.append(tile)
         print("Path tiles constructed...")
+
+        self.path_instructions = []
+        for block_position in path:
+            block = self.blocks[block_position]
+            in_vector = block.in_vector
+            out_vector = block.out_vector
+
+            in_vector_2D = [in_vector[0], in_vector[2]]
+            out_vector_2D = [out_vector[0], out_vector[2]]
+
+            self.path_instructions.append(np.cross(in_vector_2D, out_vector_2D) * block.block_size)
+
         print("Path length:", len(self.path_tiles))
+
     
     def estimated_path_lenght(self):
         return len(self.path_tiles) * MAP_BLOCK_SIZE
