@@ -12,8 +12,9 @@ class Map {
         foreach (CGameCtnBlock block in map.GetBlocks()) {
             if (block == null)
                 continue;
+            String name = block.Name.Replace("TrackWall", "RoadTech").Replace("Pillar", "");
 
-            Console.WriteLine("Block: " + block.Name);
+            Console.WriteLine("Block: " + name);
             Console.WriteLine("Position: " + block.Coord);
             Console.WriteLine("Rotation: " + block.Direction);
             Console.WriteLine("===================");
@@ -26,8 +27,12 @@ class Map {
         foreach (CGameCtnBlock block in map.GetBlocks()) {
             if (block == null)
                 continue;
-
-            file.Write(block.Name + ";");
+            if (block.Name.Contains("TrackWall")) {
+                continue;
+            }
+            
+            String name = block.Name.Replace("TrackWall", "RoadTech").Replace("Pillar", "");
+            file.Write(name + ";");
             file.Write(block.Coord.X + "," + block.Coord.Y + "," + block.Coord.Z + ";");
             file.WriteLine(block.Direction);
             

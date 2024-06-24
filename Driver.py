@@ -25,7 +25,7 @@ def plot_map():
 
 
 trained_model = "third_stage_training"
-map_name = "small_map"
+map_name = "loop_test"
 model = PPO.load(f"logs/{trained_model}.zip")
 vizualize = False
 

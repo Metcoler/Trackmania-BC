@@ -40,7 +40,7 @@ def print_fps(frame: int):
 
 if __name__ == "__main__":  
     #map_name = "AI Training #2"
-    map_name = "small_map"
+    map_name = "loop_test"
     vizualize = True
 
     game_map = Map(map_name)

@@ -120,7 +120,6 @@ class Car:
         delta_tile = self.update_path_state()
         data['map_progress'] = delta_tile
         data['total_progress'] = (self.path_tile_index / len(self.game_map.path_tiles)) * 100
-        print("=====")
         try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
             self.next_instructions = self.game_map.path_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
@@ -140,8 +139,6 @@ class Car:
         if len(self.next_instructions) < Car.SIGHT_TILES:
             self.next_instructions += [self.next_instructions[-1] for _ in range(Car.SIGHT_TILES - len(self.next_instructions))]
 
-        print("tiles",len(self.next_tiles))
-        print("instuctions",len(self.next_instructions))
         self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
         next_point_direction = self.next_points[1] - self.next_points[0]
         next_point_direction = next_point_direction / np.linalg.norm(next_point_direction)
