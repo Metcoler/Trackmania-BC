@@ -2,6 +2,11 @@
 
 Tento repozitár obsahuje zdrojový kód a súvisiace materiály k bakalárskej / diplomovej práci zameranej na vývoj autonómneho jazdiaceho agenta pre počítačovú hru Trackmania s využitím učenia posilňovaním.
 
+## Školiteľ
+**Meno školiteľa:** Ing. Alexander Šimko PhD.
+
+
+
 ## Prehľad
 
 Cieľom projektu je vytvoriť agenta schopného samostatne prechádzať trate v hre Trackmania bez zásahu človeka. Agent sa učí pomocou experimentovania a spätnej väzby z prostredia, pričom dôraz je kladený na reálne časové obmedzenia, reprezentáciu trate a architektúru učenia.
@@ -74,4 +79,13 @@ Cieľom projektu je vytvoriť agenta schopného samostatne prechádzať trate v 
 - Kostra práce
 - Prezentácia
 - Tento github
+
+## 📈 Plány do budúcna
+
+- Asynchrónna inferencia rešpektujúca podmienky reálneho času (real-time reinforcement learning)
+- Prechod z Pythonu na C# pre dosiahnutie skutočnej asynchrónnosti (obe vlákna budú skutočne paralelné)
+- Automatizovaný tréning s logovaním metrík a priebežným vyhodnocovaním výkonu agenta
+- Zadanie celej trate agentovi vopred – nespoliehať sa len na lokálnu (lidarovú) informáciu
+  - → v súlade s tým, ako fungujú profesionálni pretekári (poznajú trať dopredu)
+- Predtréning modelu na jednoduchej, plne synchrónnej hre na získanie základného jazdného správania
 
