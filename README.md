@@ -1,4 +1,4 @@
-# Trackmania-BC
+# Trackmania- Dipomová práca
 **Školiteľ:** Ing. Alexander Šimko PhD.
 
 Tento repozitár obsahuje zdrojový kód a súvisiace materiály k bakalárskej / diplomovej práci zameranej na vývoj autonómneho jazdiaceho agenta pre počítačovú hru Trackmania s využitím učenia posilňovaním.
