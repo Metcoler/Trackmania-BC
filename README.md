@@ -2,8 +2,8 @@
 
 Tento repozitár obsahuje zdrojový kód a súvisiace materiály k bakalárskej / diplomovej práci zameranej na vývoj autonómneho jazdiaceho agenta pre počítačovú hru Trackmania s využitím učenia posilňovaním.
 
-## Školiteľ
-**Meno školiteľa:** Ing. Alexander Šimko PhD.
+
+**Školiteľ:** Ing. Alexander Šimko PhD.
 
 
 
