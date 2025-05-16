@@ -80,7 +80,7 @@ Cieľom projektu je vytvoriť agenta schopného samostatne prechádzať trate v 
 - Prezentácia
 - Tento github
 
-## 📈 Plány do budúcna
+## Plány do budúcna
 
 - Asynchrónna inferencia rešpektujúca podmienky reálneho času (real-time reinforcement learning)
 - Prechod z Pythonu na C# pre dosiahnutie skutočnej asynchrónnosti (obe vlákna budú skutočne paralelné)
