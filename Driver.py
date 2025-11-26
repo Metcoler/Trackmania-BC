@@ -20,14 +20,14 @@ def plot_map():
     scene.add_geometry(enviroment.map.get_walls_mesh())
     scene.add_geometry(enviroment.map.get_road_mesh())
     scene.add_geometry(enviroment.map.get_path_line_mesh())
-    scene.add_geometry(enviroment.map.get_path_poins_mesh())
+    scene.add_geometry(enviroment.map.get_path_points_mesh())
     scene.show(callback=callback_function)
 
 
 trained_model = "third_stage_training"
-map_name = "loop_test"
+map_name = "small_map"
 model = PPO.load(f"logs/{trained_model}.zip")
-vizualize = False
+vizualize = True
 
 enviroment = RacingGameEnviroment(map_name=map_name, never_quit=True)
 

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "cPfilf1sew6Ck9lZm6ebWi995ijjDm1Qz0GHTW1+uxY4EPDbGDup9wRyEgP+uZWoo4D9Y70Ew6fcTJPeFIfqCA==",
+  "dgSpecHash": "s3XWrd+/+TwMUXLNEfoSWBi2JqONuucZK5i/9/wYQ2BXhdjL1atEsrrK4Cziev+uGvOpgkOygy+ExhnamCaWwQ==",
   "success": true,
-  "projectFilePath": "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
+  "projectFilePath": "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\sampu\\.nuget\\packages\\gbx.net\\1.2.2\\gbx.net.1.2.2.nupkg.sha512",
     "C:\\Users\\sampu\\.nuget\\packages\\gbx.net.lzo\\1.0.3\\gbx.net.lzo.1.0.3.nupkg.sha512",

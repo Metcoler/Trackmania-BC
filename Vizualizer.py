@@ -33,14 +33,14 @@ def print_fps(frame: int):
     dt = time() - start_time_fps
     if dt == 0:
         dt = 0.01
-    #print(f"FPS: {(100/dt):02f}", end="\r")
+    print(f"FPS: {(100/dt):02f}", end="\r")
     start_time_fps = time()
 
 
 
 if __name__ == "__main__":  
     #map_name = "AI Training #2"
-    map_name = "loop_test"
+    map_name = "AI Training #3"
     vizualize = True
 
     game_map = Map(map_name)

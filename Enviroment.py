@@ -47,7 +47,7 @@ class RacingGameEnviroment(gym.Env):
         self.previous_observation = observation = np.array(distances + instructions + [info['speed'], info['side_speed'], info['next_point_direction']] + list(self.previous_action))
         
         self.race_terminated = 0 
-        print("resetovane")
+
         
         return observation, info
 
@@ -90,11 +90,16 @@ class RacingGameEnviroment(gym.Env):
             
             for distance in distances:
                 if distance < 3  and not self.never_quit:
-                    ##self.race_terminated = -1
-                    ##self.controller.reset()
-                    ##self.controller.update()
-                    #reward = 0
+                    self.race_terminated = -1
+                    self.controller.reset()
+                    self.controller.update()
+                    reward = 0
                     break
+            if info["speed"] < 10 and info["time"] > 3:
+                self.race_terminated = -1
+                self.controller.reset()
+                self.controller.update()
+                reward = 0
                     
         
         
@@ -161,7 +166,7 @@ class RacingGameEnviroment(gym.Env):
 
 
         
-
+    """
     def compute_reward(self, info, distances, action):
     
         normalized_speed = info['speed'] / 1000
@@ -183,6 +188,42 @@ class RacingGameEnviroment(gym.Env):
         if info['speed'] < 3:
             reward -= 1
         return reward
+    """
+    
+    def compute_reward(self, info, distances, action):
+        # 1) progres po trati - hlavný signál
+        progress = info["map_progress"]          # -1, 0, 1
+
+        # 2) rýchlosť a zarovnanie k ďalšiemu bodu
+        speed = info["speed"]                    # 0..1000
+        align = info.get("next_point_direction", 0.0)  # -1..1, takto to máš v Car.get_data
+
+        reward = 0.0
+
+        # hlavný reward za posun po tiles
+        reward += 2.0 * progress                 # výrazne zvýrazní rozdiel medzi -1,0,1
+
+        # bonus za rýchlosť (max ~2, ak speed ~1000)
+        reward += 0.002 * speed
+
+        # bonus za smerovanie k ďalšiemu bodu
+        reward += 0.5 * align
+
+        # jemné preferovanie plynu a trest za brzdu
+        reward += 0.05 * action[0]
+        reward -= 0.05 * action[1]
+
+        # trest za blízkosť steny
+        if min(distances) < 3.0:
+            reward -= 2.0
+
+        # trest za státie
+        if speed < 3:
+            reward -= 1.0
+
+        return reward
+
+
 
 if __name__ == "__main__":
     map_name = "small_map"

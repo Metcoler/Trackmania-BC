@@ -27,7 +27,7 @@ void Main()
 	
 	while(true)
 	{
-		// open localhost TCP connection on port 9000:
+		// open localhost TCP connection on port 9002:
 		Net::Socket@ sock_serv = Net::Socket();
 		
 		if (!sock_serv.Listen("127.0.0.1", 9002))
@@ -37,13 +37,16 @@ void Main()
 		}
 		print(Time::Now + ": Waiting for incoming connection...");
 
-		while(!sock_serv.CanRead())
-		{
+		// handle to the accepted socket
+		Net::Socket@ sock = null;
+
+		// wait for a client to connect
+		while (sock is null) {
+			@sock = sock_serv.Accept();  
 			yield();
 		}
-		print("Socket can read");
 
-		auto sock = sock_serv.Accept();
+		print("Client connected!");
 
 		print(Time::Now + ": Accepted incoming connection.");
 		print("Getting write...");
@@ -52,7 +55,6 @@ void Main()
 			yield();
 		}
 		print("Socket can write");
-
 		print(Time::Now + ": Connected!");
 		
 		// OpenPlanet can store bytes in a MemoryBuffer:

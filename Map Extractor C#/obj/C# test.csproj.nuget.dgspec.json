@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\C# test.csproj": {}
+    "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj": {}
   },
   "projects": {
-    "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\C# test.csproj": {
+    "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
+        "projectUniqueName": "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
         "projectName": "C# test",
-        "projectPath": "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
+        "projectPath": "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
         "packagesPath": "C:\\Users\\sampu\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\sampu\\Desktop\\Trackmania-AI\\Map Extractor C#\\obj\\",
+        "outputPath": "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

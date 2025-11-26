@@ -97,7 +97,6 @@ class Car:
                 self.data, self.new_data = self.recieve_data_from_openplanet(inet_socket)
 
 
-
     def get_data(self):
         while self.data is None or not self.new_data:
             time.sleep(0.001)
