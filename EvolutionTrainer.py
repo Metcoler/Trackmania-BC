@@ -318,7 +318,7 @@ def plot_training_curves(history, dnf_time_for_plot: float = 60.0, prefix: str =
     )
     plt.xlabel("Generation")
     plt.ylabel("Distance traveled [%]")
-    plt.ylim(0, 100)
+    plt.ylim(0, 101)
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
