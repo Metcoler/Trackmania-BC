@@ -113,15 +113,5 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 
 ## Plány do budúcna
 
-- Asynchrónna inferencia rešpektujúca podmienky reálneho času (real-time reinforcement learning / control).
-- Prechod z Pythonu na C# alebo iný kompilovaný jazyk pre dosiahnutie skutočnej asynchrónnosti (vlákna bežiace paralelne s hrou).
-- Robustnejší, plne automatizovaný tréning s logovaním metrík a priebežným vyhodnocovaním výkonu agenta (grafy, porovnanie generácií).
-- Bohatejší stavový vektor:
-  - kombinácia lokálnych senzorov (raycast / lidar) a globálnych informácií (progress po trati, rýchlosť, smer),
-  - prípadné využitie obrazových vstupov (kamera) pre vizuálne založené politiky.
-- Zadanie celej trate agentovi vopred – nespoliehať sa len na lokálnu informáciu:
-  - v súlade s tým, ako fungujú profesionálni pretekári (poznajú trať dopredu).
-- Porovnanie RL a GA prístupu:
-  - kvalita jazdy (čas, stabilita, plynulosť),
-  - náročnosť tréningu (počet epizód, robustnosť na zmenu mapy),
-  - možnosti multiobjektívneho hodnotenia.
+- S použitím miltikriteriálneho trénovania natrénovať čo najlepšieho jedinca.
+- Napísanie diplomovej práce
