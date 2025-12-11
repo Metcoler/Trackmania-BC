@@ -3,7 +3,7 @@
 class Program {
     static void Main(string[] args) {
         //string file_name = args[0];
-        string map_name = "loop_test";
+        string map_name = "AI Training #4";
         string file_name = "../../../../Maps/GameFiles/" + map_name + ".Map.Gbx";
         string export_name = "../../../../Maps/ExportedBlocks/" + map_name + ".txt";
         Map map = new Map(file_name);

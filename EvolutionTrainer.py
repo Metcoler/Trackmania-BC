@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional, List, Tuple
 from Individual import Individual
+import matplotlib.pyplot as plt
 
 
 class EvolutionTrainer:
@@ -37,39 +38,40 @@ class EvolutionTrainer:
         index: Optional[int] = None,
         total: Optional[int] = None,
         verbose: bool = False,
-        early_penalty_per_step: float = -0.5,
-    ) -> float:
+        ) -> float:
         """
-        Spustí jednu epizódu v prostredí pre daného jedinca a nastaví mu fitness.
+        Spustí jednu epizódu v prostredí pre daného jedinca.
 
-        Ak epizóda skončí skôr ako max_steps a NEJDE o úspešné dokončenie mapy
-        (info["done"] != 1.0), za každý nevyužitý krok sa pridá penalizácia
-        early_penalty_per_step (typicky -2.0).
+        Na konci:
+        - nastaví individual.total_progress (0..100),
+        - individual.time (sekundy),
+        - individual.term (-1 crash, 0 timeout, 1 finish),
+        - spočíta scalar fitness pomocou Individual.compute_scalar_fitness().
         """
         if verbose and index is not None and total is not None:
             print(f"{index + 1}/{total} Evaluating individual...", end="\r")
 
+        
         obs, info = self.env.reset()
-        total_reward = 0.0
+        while info["done"] != 0:
+            obs, info = self.env.reset()
+        last_info = info
         steps_taken = 0
-
-        last_info = info  # keby sme náhodou potrebovali na konci
 
         for step in range(self.max_steps):
             action = individual.act(obs)
             obs, reward, done, truncated, info = self.env.step(action)
-            total_reward += float(reward)
-            steps_taken = step + 1
             last_info = info
+            steps_taken = step + 1
 
             race_term = getattr(self.env, "race_terminated", 0)
             info_done = info.get("done", 0.0) == 1.0
 
             # koniec epizódy:
-            # - done z env (limit krokov)
-            # - truncated
-            # - info['done'] z OpenPlanet (dokončenie mapy)
-            # - race_terminated (náraz / zlyhanie trate / dojazd)
+            #  - done z env (limit krokov)
+            #  - truncated
+            #  - info['done'] z OpenPlanet (dokončenie mapy)
+            #  - race_terminated (crash / zlý smer / finish)
             terminated = (
                 done
                 or truncated
@@ -79,26 +81,41 @@ class EvolutionTrainer:
             if terminated:
                 break
 
-        # penalizácia za nevyužité kroky (iba ak epizóda skončila predčasne a nešlo o success)
-        remaining_steps = self.max_steps - steps_taken
-        if remaining_steps > 0 and remaining_steps > 0:
-            race_term = getattr(self.env, "race_terminated", 0)
-            info_done = last_info.get("done", 0.0) == 1.0
+        # --------- multi-kritériá z last_info / env ---------
 
-            # epizóda skončila "zle", ak:
-            # - nebola dokončená mapa (info_done == False)
-            # (race_term < 0 v budúcnosti môžeš použiť na crash / zlý smer)
-            bad_end = not info_done
+        total_progress = float(last_info.get("total_progress", 0.0))  # 0..100
+        t = float(last_info.get("time", 0.0))
+        if t <= 0:
+            t = 1e-3  # aby sme sa vyhli deleniu nulou / -inf
 
-            if bad_end and early_penalty_per_step is not None:
-                total_reward += early_penalty_per_step * float(remaining_steps)
+        # celková prejdená vzdialenosť z OpenPlanet (Car.get_data -> data["distance"])
+        distance = float(last_info.get("distance", 0.0))
 
-        individual.fitness = total_reward
+        term = int(getattr(self.env, "race_terminated", 0))
+        info_done = last_info.get("done", 0.0) == 1.0
+        # keby náhodou OpenPlanet nahlásil finish, ale race_terminated zostalo 0
+        if info_done and term == 0:
+            term = 1
+
+        individual.total_progress = total_progress
+        individual.time = t
+        individual.term = term
+        individual.distance = distance
+
+
+        # scalar fitness len ako monotónne číslo k ranking_key
+        scalar = individual.compute_scalar_fitness()
+        individual.fitness = scalar
 
         if verbose and index is not None and total is not None:
-            print(f"{index + 1}/{total} Fitness: {individual.fitness:.3f}")
+            status = {1: "FINISH", 0: "TIMEOUT", -1: "CRASH"}.get(term, str(term))
+            print(
+                f"{index + 1}/{total} "
+                f"{status} | progress={total_progress:.1f}% | time={t:.2f}s | score={scalar:.2f}"
+            )
 
-        return total_reward
+        return scalar
+
 
     # ------------------------------------------------------------------
     # Vyhodnotenie celej populácie
@@ -168,15 +185,34 @@ class EvolutionTrainer:
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
         verbose: bool = True,
-    ) -> List[Tuple[float, float]]:
+        dnf_time_for_plot: float = 30.0,
+    ):
         """
         Spustí evolučný tréning na daný počet generácií.
-        Vracia zoznam (best_fitness, avg_fitness) za každú generáciu.
-        """
-        history: List[Tuple[float, float]] = []
 
-        best_so_far = float("-inf")
-        self.best_individual = None
+        Namiesto jednej "magickej" fitness teraz sledujeme:
+
+          - vzdialenosť (total_progress v %)
+          - čas (time v sekundách, pri DNF používame dnf_time_for_plot)
+
+        A pre obe veličiny si vedieme 3 krivky:
+          - priemer populácie
+          - najlepší jedinec v aktuálnej generácii
+          - globálne najlepší jedinec (od začiatku tréningu)
+
+        Vracia slovník history, z ktorého vieme urobiť grafy.
+        """
+
+        history = {
+            "dist_avg": [],
+            "dist_best_gen": [],
+            "dist_best_global": [],
+            "time_avg": [],
+            "time_best_gen": [],
+            "time_best_global": [],
+        }
+
+        best_so_far: Optional[Individual] = None
 
         for gen in range(generations):
             # 1) pekný header generácie
@@ -185,22 +221,61 @@ class EvolutionTrainer:
                 print(f"Generation {gen + 1}/{generations}")
                 print("=" * 20)
 
-            # 2) vyhodnotíme aktuálnu populáciu
-            fitnesses = self.evaluate_population(verbose=verbose)
-            best = float(np.max(fitnesses))
-            avg = float(np.mean(fitnesses))
-            history.append((best, avg))
+            # 2) vyhodnotíme populáciu (nastaví term/progress/time + scalar fitness)
+            _ = self.evaluate_population(verbose=verbose)
 
-            # 3) uložíme si globálne najlepšieho jedinca
-            best_idx = int(np.argmax(fitnesses))
-            if best > best_so_far:
-                best_so_far = best
-                self.best_individual = self.population[best_idx].copy()
+            # 3) štatistiky generácie
+            progresses = np.array(
+                [float(ind.total_progress) for ind in self.population],
+                dtype=np.float32,
+            )  # 0..100
+
+            # čas pre graf: finisher = skutočný čas, inak konštanta
+            times_plot = np.array(
+                [
+                    float(ind.time) if ind.term == 1 else float(dnf_time_for_plot)
+                    for ind in self.population
+                ],
+                dtype=np.float32,
+            )
+
+            dist_avg = float(progresses.mean())
+            time_avg = float(times_plot.mean())
+
+            # najlepší v generácii podľa ranking_key (__lt__)
+            best_gen = max(self.population)
+
+            dist_best_gen = float(best_gen.total_progress)
+            time_best_gen = float(
+                best_gen.time if best_gen.term == 1 else dnf_time_for_plot
+            )
+
+            # globálne najlepší (podľa ranking_key)
+            if best_so_far is None or best_gen > best_so_far:
+                best_so_far = best_gen.copy()
+
+            dist_best_global = float(best_so_far.total_progress)
+            time_best_global = float(
+                best_so_far.time if best_so_far.term == 1 else dnf_time_for_plot
+            )
+
+            # uložíme do histórie
+            history["dist_avg"].append(dist_avg)
+            history["dist_best_gen"].append(dist_best_gen)
+            history["dist_best_global"].append(dist_best_global)
+
+            history["time_avg"].append(time_avg)
+            history["time_best_gen"].append(time_best_gen)
+            history["time_best_global"].append(time_best_global)
 
             if verbose:
+                from_status = {1: "FINISH", 0: "TIMEOUT", -1: "CRASH"}.get(
+                    best_gen.term, str(best_gen.term)
+                )
                 print(
-                    f"\nSummary Gen {gen + 1}: "
-                    f"best_fitness = {best:.3f}, avg_fitness = {avg:.3f}"
+                    f"Best of generation: {from_status} | "
+                    f"progress={dist_best_gen:.1f}% | "
+                    f"time={best_gen.time:.2f}s"
                 )
 
             # 4) ak nie sme v poslednej generácii, vytvoríme novú
@@ -211,16 +286,69 @@ class EvolutionTrainer:
                     mutation_sigma=mutation_sigma,
                 )
 
+        # uložíme si aj globálneho najlepšieho jedinca
+        self.best_individual = best_so_far
+
         return history
 
 
+
+
+def plot_training_curves(history, dnf_time_for_plot: float = 60.0, prefix: str = "ga"):
+    """
+    Vykreslí a uloží dva grafy:
+
+      1) vzdialenosť (progress v %)
+      2) čas (finish time, DNF = dnf_time_for_plot)
+
+    V oboch grafoch sú tri krivky:
+      - Generation average
+      - Generation best
+      - Global best individual
+    """
+
+    gens = np.arange(1, len(history["dist_avg"]) + 1)
+
+    # --- Graf 1: Distance traveled [%] ---
+    plt.figure(figsize=(8, 4))
+    plt.plot(gens, history["dist_avg"], label="Generation average", linewidth=2)
+    plt.plot(gens, history["dist_best_gen"], label="Generation best", linewidth=2)
+    plt.plot(
+        gens, history["dist_best_global"], label="Global best individual", linewidth=2
+    )
+    plt.xlabel("Generation")
+    plt.ylabel("Distance traveled [%]")
+    plt.ylim(0, 100)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{prefix}_distance.png", dpi=200)
+    plt.close()
+
+    # --- Graf 2: Finish time [s] ---
+    plt.figure(figsize=(8, 4))
+    plt.plot(gens, history["time_avg"], label="Generation average", linewidth=2)
+    plt.plot(gens, history["time_best_gen"], label="Generation best", linewidth=2)
+    plt.plot(
+        gens, history["time_best_global"], label="Global best individual", linewidth=2
+    )
+    plt.xlabel("Generation")
+    plt.ylabel(f"Finish time [s] (DNF = {dnf_time_for_plot})")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{prefix}_time.png", dpi=200)
+    plt.close()
+
+
+
+
 if __name__ == "__main__":
-    # Jednoduchý tréningový beh GA
     from Enviroment import RacingGameEnviroment
     import csv
     from datetime import datetime
 
-    map_name = "AI Training #3"  # uprav podľa vlastnej mapy
+    map_name = "small_map"  # prípadne "AI Training #3" a pod.
     env = RacingGameEnviroment(map_name=map_name, never_quit=False)
 
     # zistíme dimenziu observácie
@@ -229,10 +357,8 @@ if __name__ == "__main__":
 
     hidden_dim = 32
     act_dim = 3
-    pop_size = 64
-
-    # použijeme rovnaký horizon, ako má env (RacingGameEnviroment.STEPS ~ 8192)
-    max_steps = 4096*2
+    pop_size = 16
+    max_steps = RacingGameEnviroment.STEPS
 
     trainer = EvolutionTrainer(
         env=env,
@@ -243,41 +369,92 @@ if __name__ == "__main__":
         max_steps=max_steps,
     )
 
-    history = None 
+    history = None
+    # spoločný timestamp pre všetky výstupy z tohto behu
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     try:
-        generations = 100  
+        generations = 50
+        dnf_time_for_plot = 60.0
+
+        # hlavný GA tréning
         history = trainer.run(
             generations=generations,
             elite_fraction=0.25,
             mutation_prob=0.1,
             mutation_sigma=0.05,
             verbose=True,
+            dnf_time_for_plot=dnf_time_for_plot,
+        )
+
+        # grafy s timestampom v názve
+        plot_training_curves(
+            history,
+            dnf_time_for_plot=dnf_time_for_plot,
+            prefix=f"ga_training_{timestamp}",
         )
 
         if trainer.best_individual is not None:
-            print(f"\nBest overall fitness: {trainer.best_individual.fitness:.3f}")
-    finally:
-        # spoločný timestamp pre súbory z tohto behu
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            print(
+                f"\nBest overall: term={trainer.best_individual.term}, "
+                f"progress={trainer.best_individual.total_progress:.1f}%, "
+                f"time={trainer.best_individual.time:.2f}s"
+            )
 
+    finally:
         # --- uloženie history do CSV ---
         if history is not None:
             history_filename = f"ga_history_{timestamp}.csv"
             with open(history_filename, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["generation", "best_fitness", "avg_fitness"])
-                for gen_idx, (best, avg) in enumerate(history, start=1):
-                    writer.writerow([gen_idx, best, avg])
+                writer.writerow(
+                    [
+                        "generation",
+                        "dist_avg",
+                        "dist_best_gen",
+                        "dist_best_global",
+                        "time_avg",
+                        "time_best_gen",
+                        "time_best_global",
+                    ]
+                )
+                num_gens = len(history["dist_avg"])
+                for gen_idx in range(num_gens):
+                    writer.writerow(
+                        [
+                            gen_idx + 1,
+                            history["dist_avg"][gen_idx],
+                            history["dist_best_gen"][gen_idx],
+                            history["dist_best_global"][gen_idx],
+                            history["time_avg"][gen_idx],
+                            history["time_best_gen"][gen_idx],
+                            history["time_best_global"][gen_idx],
+                        ]
+                    )
 
             print(f"\nHistory saved to {history_filename}")
 
-        # --- uloženie poslednej generácie jedincov ---
+        # --- uloženie poslednej generácie (aktuálnej populácie) ---
         if trainer is not None and trainer.population:
             # matica genómov: (pop_size, genome_size)
             genomes = np.stack([ind.genome for ind in trainer.population])
 
-            # vektor fitness hodnôt (None -> NaN, keby náhodou niečo nebolo spočítané)
+            progresses = np.array(
+                [float(ind.total_progress) for ind in trainer.population],
+                dtype=np.float32,
+            )
+            times = np.array(
+                [float(ind.time) for ind in trainer.population],
+                dtype=np.float32,
+            )
+            terms = np.array(
+                [int(ind.term) for ind in trainer.population],
+                dtype=np.int32,
+            )
+            distances = np.array(
+                [float(ind.distance) for ind in trainer.population],
+                dtype=np.float32,
+            )
             fitnesses = np.array(
                 [
                     np.nan if ind.fitness is None else float(ind.fitness)
@@ -287,8 +464,33 @@ if __name__ == "__main__":
             )
 
             pop_filename = f"ga_last_population_{timestamp}.npz"
-            np.savez(pop_filename, genomes=genomes, fitnesses=fitnesses)
+            np.savez(
+                pop_filename,
+                genomes=genomes,
+                progresses=progresses,
+                times=times,
+                terms=terms,
+                distances=distances,
+                fitnesses=fitnesses,
+            )
 
             print(f"Last population saved to {pop_filename}")
+
+        # --- uloženie globálne najlepšieho jedinca ---
+        if trainer is not None and trainer.best_individual is not None:
+            best = trainer.best_individual
+            best_filename = f"ga_best_individual_{timestamp}.npz"
+            np.savez(
+                best_filename,
+                genome=best.genome,
+                total_progress=float(best.total_progress),
+                time=float(best.time),
+                term=int(best.term),
+                distance=float(best.distance),
+                fitness=(
+                    np.nan if best.fitness is None else float(best.fitness)
+                ),
+            )
+            print(f"Best individual saved to {best_filename}")
 
         env.close()

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "s3XWrd+/+TwMUXLNEfoSWBi2JqONuucZK5i/9/wYQ2BXhdjL1atEsrrK4Cziev+uGvOpgkOygy+ExhnamCaWwQ==",
+  "dgSpecHash": "XDi0Kspkcp0=",
   "success": true,
   "projectFilePath": "C:\\Users\\sampu\\Desktop\\Škola\\Bakalárka\\Trackmania-AI\\Map Extractor C#\\C# test.csproj",
   "expectedPackageFiles": [
@@ -8,7 +8,11 @@
     "C:\\Users\\sampu\\.nuget\\packages\\gbx.net.lzo\\1.0.3\\gbx.net.lzo.1.0.3.nupkg.sha512",
     "C:\\Users\\sampu\\.nuget\\packages\\gbx.net.pak\\1.1.2\\gbx.net.pak.1.1.2.nupkg.sha512",
     "C:\\Users\\sampu\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\7.0.0\\microsoft.extensions.logging.abstractions.7.0.0.nupkg.sha512",
-    "C:\\Users\\sampu\\.nuget\\packages\\tmessentials\\2.3.2\\tmessentials.2.3.2.nupkg.sha512"
+    "C:\\Users\\sampu\\.nuget\\packages\\tmessentials\\2.3.2\\tmessentials.2.3.2.nupkg.sha512",
+    "C:\\Users\\sampu\\.nuget\\packages\\microsoft.netcore.app.ref\\7.0.20\\microsoft.netcore.app.ref.7.0.20.nupkg.sha512",
+    "C:\\Users\\sampu\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\7.0.20\\microsoft.windowsdesktop.app.ref.7.0.20.nupkg.sha512",
+    "C:\\Users\\sampu\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\7.0.20\\microsoft.aspnetcore.app.ref.7.0.20.nupkg.sha512",
+    "C:\\Users\\sampu\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\7.0.20\\microsoft.netcore.app.host.win-x64.7.0.20.nupkg.sha512"
   ],
   "logs": []
 }

@@ -11,7 +11,7 @@ from Map import Map
 class RacingGameEnviroment(gym.Env):
     STEPS = 2**13
 
-    def __init__(self, map_name, never_quit=False) -> None:
+    def __init__(self, map_name, max_time=60, never_quit=False) -> None:
         super().__init__()
         print("Creating the RacingGameEnviroment")
         # Observations: distances, instructions, speed, side_speed, next point dot product, 
@@ -30,6 +30,7 @@ class RacingGameEnviroment(gym.Env):
         self.controller.reset()
 
         self.max_episode_steps = RacingGameEnviroment.STEPS
+        self.max_time = max_time
         if never_quit:
             self.max_episode_steps = float('inf')
         self.current_step = 0
@@ -60,25 +61,31 @@ class RacingGameEnviroment(gym.Env):
 
 
         
-
         if self.race_terminated != 0:
             distances, instructions, info = self.previous_observation_info
             observation = self.previous_observation
             print(self.current_step, ":",  self.race_terminated, " "*20,  end='\r')
             return observation, self.race_terminated, done, truncated, info
         else:
-            self.perform_action(action)
+            try:
+                self.perform_action(action)
+            except:
+                ...
+                # TODO [nan, nan, nan] shouldnt be action... Where did it come from    
             distances, instructions, info = self.observation_info()
             observation = np.array(distances + instructions + [info['speed'], info['side_speed'], info['next_point_direction']] + list(self.previous_action))
             self.previous_observation_info = distances, instructions, info
             self.previous_observation = observation
         
-
             
+        if info["time"] >= self.max_time:
+            self.controller.reset()
+            self.controller.update()
+            self.race_terminated = 1
 
         reward = self.compute_reward(info, distances, action)
         
-        if info["done"] == 1.0 and not self.never_quit:
+        if info["done"] == 1.0:
             self.controller.reset()
             self.controller.update()
             self.race_terminated = 1
@@ -89,21 +96,22 @@ class RacingGameEnviroment(gym.Env):
         else:
             
             for distance in distances:
-                if distance < 3  and not self.never_quit:
+                if distance < 2 and not self.never_quit:
                     self.race_terminated = -1
                     self.controller.reset()
                     self.controller.update()
                     reward = 0
                     break
-            if info["speed"] < 10 and info["time"] > 3:
+            if info["speed"] < 3 and info["time"] > 3 and not self.never_quit:
                 self.race_terminated = -1
                 self.controller.reset()
                 self.controller.update()
                 reward = 0
-                    
+
         
         
-        print(self.current_step, ":", reward, " "*20,  end='\r')
+        
+        print(self.current_step, ":", info["speed"], " "*20,  end='\r')
         
         
         return observation, reward, done, truncated, info

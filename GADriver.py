@@ -9,9 +9,10 @@ from Enviroment import RacingGameEnviroment
 from Individual import Individual
 
 
-def find_latest_population(pattern: str = "ga_last_population_*.npz") -> str:
+def find_latest_population(pattern: str = "logs/ga_last_population_*.npz") -> str:
     """Nájde najnovší .npz súbor s populáciou podľa mtime."""
     files = glob.glob(pattern)
+    
     if not files:
         raise FileNotFoundError(
             f"Nenašiel som žiadny súbor podľa patternu '{pattern}'. "

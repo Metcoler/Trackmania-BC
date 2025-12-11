@@ -118,7 +118,7 @@ class Car:
 
         delta_tile = self.update_path_state()
         data['map_progress'] = delta_tile
-        data['total_progress'] = (self.path_tile_index / len(self.game_map.path_tiles)) * 100
+        data['total_progress'] = (self.path_tile_index / (len(self.game_map.path_tiles)-1)) * 100
         try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
             self.next_instructions = self.game_map.path_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
