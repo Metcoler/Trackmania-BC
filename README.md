@@ -50,7 +50,6 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 
 - `Training.py` – tréningový proces pre RL agenta (PPO a súvisiaca RL slučka)
 - `ppo_racing_game.zip` – pôvodná implementácia PPO (Proximal Policy Optimization) pre racing hru
-- `agent_driver.mp4` – ukážka jazdy RL agenta
 
 ### Evolučný / GA (neuroevolúcia) agent
 
