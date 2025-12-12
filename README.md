@@ -100,7 +100,7 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 - Zrušené stretnutie
 
 **Týždeň 10 (24. 11. – 30. 11. 2025):**  
-- Trénovanie agenta
+- Trénovanie agenta - multikriteriálne hodnotenie
 
 **Týždeň 11 (1. 12. – 7. 12. 2025):**  
 - Písanie práce
