@@ -67,34 +67,36 @@ class RacingGameEnviroment(gym.Env):
             print(self.current_step, ":",  self.race_terminated, " "*20,  end='\r')
             return observation, self.race_terminated, done, truncated, info
         else:
-            try:
-                self.perform_action(action)
-            except:
-                ...
-                # TODO [nan, nan, nan] shouldnt be action... Where did it come from    
+            safe_action = np.asarray(action, dtype=np.float32)
+            if safe_action.shape != (3,) or not np.all(np.isfinite(safe_action)):
+                safe_action = np.zeros(3, dtype=np.float32)
+            self.perform_action(safe_action)
             distances, instructions, info = self.observation_info()
             observation = np.array(distances + instructions + [info['speed'], info['side_speed'], info['next_point_direction']] + list(self.previous_action))
             self.previous_observation_info = distances, instructions, info
             self.previous_observation = observation
-        
-            
+         
+             
+        timed_out = False
         if info["time"] >= self.max_time:
             self.controller.reset()
             self.controller.update()
-            self.race_terminated = 1
+            self.race_terminated = 0
+            timed_out = True
+            truncated = True
 
-        reward = self.compute_reward(info, distances, action)
+        reward = self.compute_reward(info, distances, safe_action)
         
         if info["done"] == 1.0:
             self.controller.reset()
             self.controller.update()
             self.race_terminated = 1
-        elif info["next_point_direction"] < -0.5  and not self.never_quit:
+        elif not timed_out and info["next_point_direction"] < -0.5 and not self.never_quit:
             self.controller.reset()
             self.controller.update()
             self.race_terminated = -1
-        else:
-            
+        elif not timed_out:
+             
             for distance in distances:
                 if distance < 2 and not self.never_quit:
                     self.race_terminated = -1
@@ -124,7 +126,11 @@ class RacingGameEnviroment(gym.Env):
             self.controller.reset()
             self.controller.update()
             return
-        
+
+        delta_action = np.asarray(delta_action, dtype=np.float32)
+        if delta_action.shape != (3,) or not np.all(np.isfinite(delta_action)):
+            return
+
         action = self.previous_action + delta_action
         action = np.clip(action, -1.0, 1.0)
         self.previous_action = action

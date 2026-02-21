@@ -1,5 +1,6 @@
+import select
 import socket
-from struct import unpack
+import struct
 import trimesh
 import numpy as np
 import threading
@@ -13,6 +14,8 @@ class Car:
     NUM_LASERS = 15
     ANGLE = 180
     SIGHT_TILES = 10
+    PACKET_FLOAT_COUNT = 16
+    PACKET_SIZE = PACKET_FLOAT_COUNT * 4
 
     def __init__(self, game_map: Map) -> None:
         self.position = np.array(game_map.get_start_position())
@@ -44,6 +47,7 @@ class Car:
         self.data = None
         self.ready = False
         self.new_data = False
+        self.data_lock = threading.Lock()
         self.thread = threading.Thread(target=self.data_getter_thread, daemon=True)
         self.thread.start()
 
@@ -87,28 +91,61 @@ class Car:
         scene.camera_transform = transformation_matrix
     
     def data_getter_thread(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as inet_socket:
-            # Connect to the openplanet plugin
-            print("Trying to connect...")
-            inet_socket.connect(("127.0.0.1", 9002))
-            print("Connected to openplanet")
-            self.ready = True
-            while True:
-                self.data, self.new_data = self.recieve_data_from_openplanet(inet_socket)
+        while True:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as inet_socket:
+                    # Connect to the openplanet plugin
+                    print("Trying to connect...")
+                    inet_socket.connect(("127.0.0.1", 9002))
+                    print("Connected to openplanet")
+                    self.ready = True
+
+                    recv_buffer = bytearray()
+                    while True:
+                        readable, _, _ = select.select([inet_socket], [], [], 1.0)
+                        if not readable:
+                            continue
+
+                        chunk = inet_socket.recv(4096)
+                        if not chunk:
+                            raise ConnectionError("OpenPlanet socket closed the connection.")
+                        recv_buffer.extend(chunk)
+
+                        latest_data = None
+                        while len(recv_buffer) >= Car.PACKET_SIZE:
+                            packet = bytes(recv_buffer[:Car.PACKET_SIZE])
+                            del recv_buffer[:Car.PACKET_SIZE]
+                            latest_data = self.decode_data_from_openplanet(packet)
+
+                        if latest_data is None:
+                            continue
+
+                        latest_data["recv_time"] = time.perf_counter()
+                        with self.data_lock:
+                            self.data = latest_data
+                            self.new_data = True
+            except Exception as e:
+                self.ready = False
+                print(f"OpenPlanet stream disconnected: {e}")
+                time.sleep(1.0)
 
 
     def get_data(self):
-        while self.data is None or not self.new_data:
+        while True:
+            with self.data_lock:
+                if self.data is not None and self.new_data:
+                    data = self.data.copy()
+                    self.new_data = False
+                    break
             time.sleep(0.001)
-
-        data, self.new_data = self.data, False
-
 
         if data["time"] < 0:
             self.reset()
 
-        self.direction = np.array([data['dx'], 0, data['dz']])
-        self.direction = self.direction / np.linalg.norm(self.direction)
+        direction = np.array([data['dx'], 0.0, data['dz']], dtype=np.float32)
+        direction_norm = np.linalg.norm(direction)
+        if direction_norm > 1e-6:
+            self.direction = direction / direction_norm
 
         self.position = np.array([data['x'], data['y'], data['z']])
         self.speed = data['speed']
@@ -140,18 +177,17 @@ class Car:
 
         self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
         next_point_direction = self.next_points[1] - self.next_points[0]
-        next_point_direction = next_point_direction / np.linalg.norm(next_point_direction)
-
-        dot_product = np.dot(next_point_direction, self.direction)
+        next_point_direction_norm = np.linalg.norm(next_point_direction)
+        if next_point_direction_norm > 1e-6:
+            next_point_direction = next_point_direction / next_point_direction_norm
+            dot_product = float(np.dot(next_point_direction, self.direction))
+        else:
+            dot_product = 1.0
         
         data['next_point_direction'] = dot_product
         self.generate_laser_directions(Car.ANGLE)
         self.find_closest_intersections()
         return self.distances, self.next_instructions, data
-    
-    def reset(self):
-        # TODO Reset the car to the start position
-        pass
 
     
 
@@ -178,26 +214,32 @@ class Car:
         return 0
         
 
-    def recieve_data_from_openplanet(self, s: socket.socket):
-        data = dict()
+    def decode_data_from_openplanet(self, packet: bytes):
+        if len(packet) != Car.PACKET_SIZE:
+            raise ValueError(f"Invalid packet size: {len(packet)} != {Car.PACKET_SIZE}")
 
-        data['speed'] = unpack(b'@f', s.recv(4))[0] # speed
-        data['side_speed'] = unpack(b'@f', s.recv(4))[0] # side speed
-        data['distance'] = unpack(b'@f', s.recv(4))[0] # distance
-        data['x'] = unpack(b'@f', s.recv(4))[0] # x
-        data['y'] = unpack(b'@f', s.recv(4))[0] + 0.2  # y
-        data['z'] = unpack(b'@f', s.recv(4))[0] # z
-        data['steer'] = unpack(b'@f', s.recv(4))[0] # steer
-        data['gas'] = unpack(b'@f', s.recv(4))[0] # gas
-        data['brake'] = unpack(b'@f', s.recv(4))[0] # brake
-        data['done'] = unpack(b'@f', s.recv(4))[0] # finished
-        data['gear'] = unpack(b'@f', s.recv(4))[0] # gear
-        data['rpm'] = unpack(b'@f', s.recv(4))[0] # rpm
-        data['dx'] = unpack(b'@f', s.recv(4))[0] # dx
-        data['dy'] = unpack(b'@f', s.recv(4))[0] # dy
-        data['dz'] = unpack(b'@f', s.recv(4))[0] # dz
-        data['time'] = unpack(b'@f', s.recv(4))[0] # time
-        return data, True
+        values = struct.unpack("<16f", packet)
+        keys = [
+            "speed",
+            "side_speed",
+            "distance",
+            "x",
+            "y",
+            "z",
+            "steer",
+            "gas",
+            "brake",
+            "done",
+            "gear",
+            "rpm",
+            "dx",
+            "dy",
+            "dz",
+            "time",
+        ]
+        data = dict(zip(keys, values))
+        data["y"] += 0.2
+        return data
 
     def visualize_rays(self, scene: trimesh.Scene):
         for i, ray_end in enumerate(self.intersections):

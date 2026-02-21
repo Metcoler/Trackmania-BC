@@ -65,6 +65,7 @@ void Main()
 		float previous_x = 0;
 		float previous_y = 0;
 		float previous_z = 0;
+		float previous_time = -1.0f;
 
 		// packet series.
 		int packet_number = 0;
@@ -153,8 +154,24 @@ void Main()
 		
 			// The state is ready.
 			// We can send data to TMRL for this TrackMania frame:
-			print("Sending data: " + packet_number++);
+			if ((packet_number % 120) == 0) {
+				print("Sending data: " + packet_number);
+			}
+			packet_number++;
 			
+			// get player time 
+			float time = (GetApp().PlaygroundScript.Now - player.StartTime) / 1000.0;
+
+			// reset distance after restart/respawn/new attempt
+			if (time < 0.0f || (previous_time >= 0.0f && time < previous_time)) {
+				distance = 0.0f;
+				previous_x = state.Position.x;
+				previous_y = state.Position.y;
+				previous_z = state.Position.z;
+				packet_number = 0;
+			}
+			previous_time = time;
+
 			// distance update
 			if (previous_x == 0 && previous_y == 0 && previous_z == 0) {
 				previous_x = state.Position.x;
@@ -170,9 +187,6 @@ void Main()
 			previous_x = state.Position.x;
 			previous_y = state.Position.y;
 			previous_z = state.Position.z;
-		
-			// get player time 
-			float time = (GetApp().PlaygroundScript.Now - player.StartTime) / 1000.0;
 
 			// TODO detect car crashing 	
 			
