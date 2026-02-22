@@ -14,8 +14,28 @@ class RacingGameEnviroment(gym.Env):
     def __init__(self, map_name, max_time=60, never_quit=False) -> None:
         super().__init__()
         print("Creating the RacingGameEnviroment")
-        # Observations: distances, instructions, speed, side_speed, next point dot product, 
-        self.observation_space = gym.spaces.Box(low=0.0, high=1000.0, shape=(Car.NUM_LASERS + Car.SIGHT_TILES + 6,))
+        # Observation normalization constants (kept explicit for easier tuning).
+        self.laser_max_distance = 320.0
+        self.path_instruction_abs_max = 4.0
+        self.speed_abs_max = 1000.0
+        self.side_speed_abs_max = 1000.0
+
+        # Observations: [lasers N] + [path instructions M] + [speed, side_speed, next_point_dir] + [prev action 3]
+        obs_dim = Car.NUM_LASERS + Car.SIGHT_TILES + 6
+        obs_low = np.array(
+            [0.0] * Car.NUM_LASERS + [-1.0] * (Car.SIGHT_TILES + 6),
+            dtype=np.float32,
+        )
+        obs_high = np.array(
+            [1.0] * Car.NUM_LASERS + [1.0] * (Car.SIGHT_TILES + 6),
+            dtype=np.float32,
+        )
+        self.observation_space = gym.spaces.Box(
+            low=obs_low,
+            high=obs_high,
+            shape=(obs_dim,),
+            dtype=np.float32,
+        )
 
         # Actions: throttle, brake, left, right as binary number
         self.action_space = self.action_space = gym.spaces.Box(low=-0.2, high=0.2, shape=(3,), dtype=np.float32)
@@ -44,8 +64,12 @@ class RacingGameEnviroment(gym.Env):
         self.reset_game()
         self.current_step = 0
         self.previous_observation_info = distances, instructions, info = self.observation_info()
-        self.previous_action = np.array([0.0, 0.0, 0.0])
-        self.previous_observation = observation = np.array(distances + instructions + [info['speed'], info['side_speed'], info['next_point_direction']] + list(self.previous_action))
+        self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.previous_observation = observation = self.build_observation(
+            distances=distances,
+            instructions=instructions,
+            info=info,
+        )
         
         self.race_terminated = 0 
 
@@ -72,7 +96,11 @@ class RacingGameEnviroment(gym.Env):
                 safe_action = np.zeros(3, dtype=np.float32)
             self.perform_action(safe_action)
             distances, instructions, info = self.observation_info()
-            observation = np.array(distances + instructions + [info['speed'], info['side_speed'], info['next_point_direction']] + list(self.previous_action))
+            observation = self.build_observation(
+                distances=distances,
+                instructions=instructions,
+                info=info,
+            )
             self.previous_observation_info = distances, instructions, info
             self.previous_observation = observation
          
@@ -120,6 +148,53 @@ class RacingGameEnviroment(gym.Env):
 
     def observation_info(self):
         return self.car.get_data()
+
+    def _fit_vector(self, values, expected_size: int, pad_value: float):
+        v = np.asarray(values, dtype=np.float32).reshape(-1)
+        if v.size < expected_size:
+            v = np.pad(v, (0, expected_size - v.size), constant_values=pad_value)
+        elif v.size > expected_size:
+            v = v[:expected_size]
+        return v
+
+    def build_observation(self, distances, instructions, info):
+        distances_vec = self._fit_vector(
+            values=distances,
+            expected_size=Car.NUM_LASERS,
+            pad_value=self.laser_max_distance,
+        )
+        instructions_vec = self._fit_vector(
+            values=instructions,
+            expected_size=Car.SIGHT_TILES,
+            pad_value=0.0,
+        )
+
+        # Normalize to stable ranges for tanh-based policy.
+        distances_norm = np.clip(distances_vec / self.laser_max_distance, 0.0, 1.0)
+        instructions_norm = np.clip(
+            instructions_vec / self.path_instruction_abs_max, -1.0, 1.0
+        )
+        speed_norm = float(
+            np.clip(info.get("speed", 0.0) / self.speed_abs_max, -1.0, 1.0)
+        )
+        side_speed_norm = float(
+            np.clip(info.get("side_speed", 0.0) / self.side_speed_abs_max, -1.0, 1.0)
+        )
+        next_point_direction = float(
+            np.clip(info.get("next_point_direction", 1.0), -1.0, 1.0)
+        )
+
+        return np.concatenate(
+            [
+                distances_norm,
+                instructions_norm,
+                np.array(
+                    [speed_norm, side_speed_norm, next_point_direction],
+                    dtype=np.float32,
+                ),
+                self.previous_action.astype(np.float32, copy=False),
+            ]
+        ).astype(np.float32, copy=False)
     
     def perform_action(self, delta_action):
         if self.race_terminated != 0:
