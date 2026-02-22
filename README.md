@@ -100,13 +100,43 @@ Repozitár aktuálne obsahuje **dve hlavné vetvy prístupu**:
 - Zrušené stretnutie
 
 **Týždeň 10 (24. 11. – 30. 11. 2025):**  
-- Trénovanie agenta
+- Trénovanie agenta - multikriteriálne hodnotenie
 
 **Týždeň 11 (1. 12. – 7. 12. 2025):**  
 - Písanie práce
 
 **Týždeň 12 (8. 12. – 14. 12. 2025):**  
 - Pŕiprava prezentácie, písanie práce
+
+---
+
+## Výsledky tréningu
+
+Nižšie sú ukážky výsledkov evolučného tréningu agenta na jednej vybranej trati.  
+Tréning prebiehal niekoľko desiatok generácií, v každej generácii bola populácia
+jedincov vyhodnotená podľa progressu po trati a času jazdy.
+
+### Prejdená vzdialenosť
+
+![Distance traveled during training](ga_training_distance.png)
+
+Graf zobrazuje vývoj percenta prejdenej trate v závislosti od generácie:
+
+- **Generation average** – priemerný jedinec v danej generácii,  
+- **Generation best** – najlepší jedinec v generácii,  
+- **Global best individual** – globálne najlepší jedinec naprieč všetkými generáciami.
+
+### Čas jazdy
+
+![Finish time during training](ga_training_time.png)
+
+Druhý graf ukazuje čas jazdy v sekundách (nedokončené jazdy sú penalizované
+časom 60 s):
+
+- postupný pokles času globálne najlepšieho jedinca naznačuje,  
+  že evolučný algoritmus nachádza stále rýchlejších agentov,
+- priemerný čas zostáva vyšší, čo odráža diverzitu populácie
+  a prítomnosť slabších jedincov.
 
 ---
 
