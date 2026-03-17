@@ -10,7 +10,8 @@ class EvolutionPolicy:
     Všetky váhy sú uložené v jednom 1D genóme (vektore).
     """
     def __init__(self, obs_dim: int, hidden_dim: int, act_dim: int,
-                 genome: Optional[np.ndarray] = None) -> None:
+                 genome: Optional[np.ndarray] = None,
+                 action_scale: Optional[np.ndarray] = None) -> None:
         self.obs_dim = obs_dim
         self.hidden_dim = hidden_dim
         self.act_dim = act_dim
@@ -27,6 +28,18 @@ class EvolutionPolicy:
                     f"Genome má dĺžku {genome.shape[0]}, očakávané {self.genome_size}"
                 )
             self.genome = genome
+
+        if action_scale is None:
+            self.action_scale = np.full((self.act_dim,), 0.2, dtype=np.float32)
+        else:
+            scale = np.asarray(action_scale, dtype=np.float32).reshape(-1)
+            if scale.size == 1:
+                scale = np.repeat(scale, self.act_dim).astype(np.float32)
+            if scale.size != self.act_dim:
+                raise ValueError(
+                    f"action_scale has size {scale.size}, expected 1 or {self.act_dim}"
+                )
+            self.action_scale = scale.astype(np.float32, copy=False)
 
     @staticmethod
     def compute_genome_size(obs_dim: int, hidden_dim: int, act_dim: int) -> int:
@@ -78,5 +91,5 @@ class EvolutionPolicy:
         y_raw = np.tanh(W2 @ h_with_bias)  # (act_dim,)
 
         # škálovanie do [-0.2, 0.2]
-        action = 0.2 * y_raw
+        action = self.action_scale * y_raw
         return action.astype(np.float32)

@@ -8,7 +8,7 @@ class Individual:
     Jedinec genetického algoritmu:
       - drží policy (MLP)
       - multi-kritériá hodnotenia:
-          * term            (-1 crash, 0 timeout, 1 finish)
+          * term            (<= -1 crash / touch-limit, 0 timeout, 1 finish)
           * total_progress  [0..100] % trate
           * distance        celková prejdená vzdialenosť (z OpenPlanet: data["distance"])
           * time            čas v sekundách
@@ -21,8 +21,15 @@ class Individual:
         hidden_dim: int,
         act_dim: int,
         genome: Optional[np.ndarray] = None,
+        action_scale: Optional[np.ndarray] = None,
     ) -> None:
-        self.policy = EvolutionPolicy(obs_dim, hidden_dim, act_dim, genome)
+        self.policy = EvolutionPolicy(
+            obs_dim,
+            hidden_dim,
+            act_dim,
+            genome,
+            action_scale=action_scale,
+        )
 
         # scalar "fitness" – odvodené číslo, používané len na logy/históriu
         self.fitness: Optional[float] = None
@@ -60,15 +67,15 @@ class Individual:
 
     # ----------------- multi-kritériové porovnávanie -----------------
 
-    def ranking_key(self) -> Tuple[int, float, float, float]:
+    def ranking_key(self) -> Tuple[int, float, int, float]:
         """
         Lexikografický kľúč pre porovnanie jedincov.
 
         Poradie:
-          1. term            (-1 crash < 0 timeout < 1 finish)
+          1. term            (väčšie je lepšie; 1 > 0 > -1 > -3)
           2. total_progress  (vyššie percento trate je lepšie)
-          3. distance        (menšia prejdená vzdialenosť je lepšia)
-          4. time            (nižší čas je lepší)
+          3. time_bucket     (nižší čas v 1s bucketoch je lepší)
+          4. distance        (menšia prejdená vzdialenosť je lepšia)
 
         Keďže v EvolutionTrainer používame sort(reverse=True),
         "najlepší" jedinec bude mať NAJväčší kľúč.
@@ -78,37 +85,43 @@ class Individual:
         dist = float(self.distance)
         t = float(self.time)
 
-        # menšia vzdialenosť / čas => používame záporné hodnoty
-        return (term, progress, -t, -dist)
+        # 1-second discrete buckets so distance can act as a meaningful tiebreaker.
+        if np.isfinite(t):
+            time_bucket = int(np.floor(t))
+        else:
+            time_bucket = 10**9
+
+        # smaller time_bucket / distance => use negatives for reverse sorting
+        return (term, progress, -time_bucket, -dist)
 
     def compute_scalar_fitness(self) -> float:
         """
         Vyrobí skalárnu "fitness" len na logovanie / históriu.
 
-        Je monotónna k ranking_key (vyšší = lepší), t.j. poradie
-        podľa scalar_fitness je rovnaké ako poradie podľa
-        (term, progress, distance, time).
+        Má rovnakú prioritu kritérií ako ranking_key:
+          (term, progress, time_bucket, distance)
+        Používa sa len na logovanie / grafy, nie na samotný výber jedincov.
         """
-        term, progress, neg_dist, neg_time = self.ranking_key()
+        term, progress, neg_time_bucket, neg_dist = self.ranking_key()
+        time_bucket = -neg_time_bucket
         dist = -neg_dist
-        t = -neg_time
 
         # Odhadované rozsahy:
-        #  - term ∈ {-1,0,1}
+        #  - term ∈ {...,-3,-2,-1,0,1}
         #  - progress ∈ [0,100]
+        #  - time_bucket ≈ [0, 300]
         #  - distance ≈ [0, pár tisíc]
-        #  - time ≈ [0, 300]
         #
         # Váhy zvolíme tak, aby:
         #  - term dominoval všetkému
-        #  - progress dominoval distance/time
-        #  - distance dominovalo času
+        #  - progress dominoval time_bucket/distance
+        #  - time_bucket dominoval distance
         A = 1_000_000_000.0  # váha pre term
         B = 1_000_000.0      # váha pre progress
-        D = 100.0            # váha pre distance
-        C = 1.0              # váha pre time
+        C = 10_000.0         # váha pre time_bucket
+        D = 1.0              # váha pre distance
 
-        return term * A + progress * B - dist * D - t * C
+        return term * A + progress * B - time_bucket * C - dist * D
 
     def __lt__(self, other: "Individual") -> bool:
         if not isinstance(other, Individual):
@@ -141,6 +154,7 @@ class Individual:
             hidden_dim=self.policy.hidden_dim,
             act_dim=self.policy.act_dim,
             genome=self.genome.copy(),
+            action_scale=self.policy.action_scale.copy(),
         )
         new.fitness = self.fitness
         new.total_progress = self.total_progress
@@ -183,4 +197,5 @@ class Individual:
             hidden_dim=self.policy.hidden_dim,
             act_dim=self.policy.act_dim,
             genome=child_genome,
+            action_scale=self.policy.action_scale.copy(),
         )

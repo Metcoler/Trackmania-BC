@@ -234,6 +234,7 @@ class EvolutionTrainer:
         act_dim: int = 3,
         pop_size: int = 16,
         max_steps: int = 2000,
+        policy_action_scale: Optional[np.ndarray] = None,
         logger: Optional[TrainingLogger] = None,
     ) -> None:
         self.env = env
@@ -242,10 +243,17 @@ class EvolutionTrainer:
         self.act_dim = act_dim
         self.pop_size = pop_size
         self.max_steps = max_steps
+        self.policy_action_scale = None if policy_action_scale is None else np.asarray(policy_action_scale, dtype=np.float32)
         self.logger = logger
 
         self.population: List[Individual] = [
-            Individual(obs_dim, hidden_dim, act_dim) for _ in range(pop_size)
+            Individual(
+                obs_dim,
+                hidden_dim,
+                act_dim,
+                action_scale=self.policy_action_scale,
+            )
+            for _ in range(pop_size)
         ]
         self.best_individual: Optional[Individual] = None
 
@@ -254,6 +262,17 @@ class EvolutionTrainer:
 
         # Ak načítame checkpoint vyhodnotenej generácie, prvý krok run() má vytvoriť ďalšiu.
         self._loaded_checkpoint_evaluated: bool = False
+        self._pending_initial_downselect: bool = False
+
+    @staticmethod
+    def _term_status_text(term: int) -> str:
+        if term == 1:
+            return "FINISH"
+        if term == 0:
+            return "TIMEOUT"
+        if term < 0:
+            return f"CRASHx{abs(int(term))}"
+        return str(term)
 
     def evaluate_individual(
         self,
@@ -261,6 +280,7 @@ class EvolutionTrainer:
         index: Optional[int] = None,
         total: Optional[int] = None,
         verbose: bool = False,
+        mirrored: bool = False,
     ) -> float:
         if verbose and index is not None and total is not None:
             print(f"{index + 1}/{total} Evaluating individual...", end="\r")
@@ -272,7 +292,10 @@ class EvolutionTrainer:
         last_info = info
 
         for _ in range(self.max_steps):
-            action = individual.act(obs)
+            policy_obs = self._mirror_observation(obs) if mirrored else obs
+            action = individual.act(policy_obs)
+            if mirrored:
+                action = self._mirror_action_delta(action)
             obs, reward, done, truncated, info = self.env.step(action)
             last_info = info
 
@@ -303,23 +326,74 @@ class EvolutionTrainer:
         individual.fitness = scalar
 
         if verbose and index is not None and total is not None:
-            status = {1: "FINISH", 0: "TIMEOUT", -1: "CRASH"}.get(term, str(term))
+            status = self._term_status_text(term)
+            mirror_tag = " [MIRROR]" if mirrored else ""
             print(
                 f"{index + 1}/{total} "
                 f"{status} | progress={total_progress:.1f}% | "
-                f"time={t:.2f}s | score={scalar:.2f}"
+                f"time={t:.2f}s | score={scalar:.2f}{mirror_tag}"
             )
 
         return scalar
 
-    def evaluate_population(self, verbose: bool = False) -> np.ndarray:
-        fitnesses = np.zeros(self.pop_size, dtype=np.float32)
+    def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
+        x = np.asarray(obs, dtype=np.float32).copy()
+        if x.ndim != 1:
+            return x
+
+        num_lasers = int(getattr(self.env.car, "NUM_LASERS", 15))
+        sight_tiles = int(getattr(self.env.car, "SIGHT_TILES", 10))
+        min_expected = num_lasers + sight_tiles + 7
+        if x.shape[0] < min_expected:
+            return x
+
+        # [lasers][instructions][speed, side_speed, next_point_dir, dt_ratio][prev_action(3)]
+        x[:num_lasers] = x[:num_lasers][::-1]
+        instr_slice = slice(num_lasers, num_lasers + sight_tiles)
+        x[instr_slice] = -x[instr_slice]
+
+        aux_offset = num_lasers + sight_tiles
+        side_speed_idx = aux_offset + 1
+        prev_action_steer_idx = aux_offset + 6
+        x[side_speed_idx] = -x[side_speed_idx]
+        x[prev_action_steer_idx] = -x[prev_action_steer_idx]
+        return x
+
+    @staticmethod
+    def _mirror_action_delta(action: np.ndarray) -> np.ndarray:
+        a = np.asarray(action, dtype=np.float32).copy()
+        if a.ndim == 1 and a.shape[0] >= 3:
+            a[2] = -a[2]
+        return a
+
+    @staticmethod
+    def _sample_mirror_flags(count: int, mirror_episode_prob: float) -> np.ndarray:
+        if count <= 0 or mirror_episode_prob <= 0.0:
+            return np.zeros(max(count, 0), dtype=bool)
+        if mirror_episode_prob >= 1.0:
+            return np.ones(count, dtype=bool)
+        return (np.random.rand(count) < mirror_episode_prob)
+
+    def evaluate_population(
+        self,
+        verbose: bool = False,
+        mirror_flags: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        n = len(self.population)
+        fitnesses = np.zeros(n, dtype=np.float32)
+        if mirror_flags is None:
+            mirror_flags = np.zeros(n, dtype=bool)
+        elif len(mirror_flags) != n:
+            raise ValueError(
+                f"mirror_flags length {len(mirror_flags)} does not match population size {n}."
+            )
         for i, ind in enumerate(self.population):
             fitnesses[i] = self.evaluate_individual(
                 individual=ind,
                 index=i,
-                total=self.pop_size,
+                total=n,
                 verbose=verbose,
+                mirrored=bool(mirror_flags[i]),
             )
         return fitnesses
 
@@ -382,7 +456,7 @@ class EvolutionTrainer:
 
         terms = np.array([int(ind.term) for ind in self.population], dtype=np.int32)
         finish_rate = float((terms == 1).mean())
-        crash_rate = float((terms == -1).mean())
+        crash_rate = float((terms < 0).mean())
         timeout_rate = float((terms == 0).mean())
 
         summary_row = dict(
@@ -411,6 +485,11 @@ class EvolutionTrainer:
         elite_fraction: float = 0.2,
         mutation_prob: float = 0.1,
         mutation_sigma: float = 0.1,
+        mutation_prob_decay: float = 1.0,
+        mutation_prob_min: float = 0.0,
+        mutation_sigma_decay: float = 1.0,
+        mutation_sigma_min: float = 0.0,
+        mirror_episode_prob: float = 0.0,
         verbose: bool = True,
         dnf_time_for_plot: float = 30.0,
         checkpoint_every: int = 10,
@@ -442,12 +521,24 @@ class EvolutionTrainer:
                 elite_fraction=elite_fraction,
                 mutation_prob=mutation_prob,
                 mutation_sigma=mutation_sigma,
+                mutation_prob_decay=mutation_prob_decay,
+                mutation_prob_min=mutation_prob_min,
+                mutation_sigma_decay=mutation_sigma_decay,
+                mutation_sigma_min=mutation_sigma_min,
+                mirror_episode_prob=mirror_episode_prob,
                 checkpoint_every=checkpoint_every,
                 dnf_time_for_plot=dnf_time_for_plot,
             )
             if training_config is not None:
                 cfg.update(training_config)
             self.logger.write_config(cfg, merge=True)
+
+        current_mutation_prob = float(mutation_prob)
+        current_mutation_sigma = float(mutation_sigma)
+        mutation_prob_decay = float(mutation_prob_decay)
+        mutation_prob_min = float(mutation_prob_min)
+        mutation_sigma_decay = float(mutation_sigma_decay)
+        mutation_sigma_min = float(mutation_sigma_min)
 
         if self._loaded_checkpoint_evaluated:
             if verbose:
@@ -457,10 +548,52 @@ class EvolutionTrainer:
                 )
             self.next_generation(
                 elite_fraction=elite_fraction,
-                mutation_prob=mutation_prob,
-                mutation_sigma=mutation_sigma,
+                mutation_prob=current_mutation_prob,
+                mutation_sigma=current_mutation_sigma,
             )
             self._loaded_checkpoint_evaluated = False
+
+        if self._pending_initial_downselect:
+            loaded_count = len(self.population)
+            if loaded_count > self.pop_size:
+                if verbose:
+                    print("\n" + "=" * 20)
+                    print("Initial TM Screening (Generation 0)")
+                    print("=" * 20)
+                    print(
+                        f"Evaluating all loaded candidates: {loaded_count} -> "
+                        f"select top {self.pop_size} for TM generation 1"
+                    )
+
+                screening_mirror_flags = self._sample_mirror_flags(
+                    loaded_count,
+                    mirror_episode_prob=mirror_episode_prob,
+                )
+                if verbose and screening_mirror_flags.any():
+                    print(
+                        f"Screening mirror flags: "
+                        f"{int(screening_mirror_flags.sum())}/{loaded_count}"
+                    )
+                _ = self.evaluate_population(
+                    verbose=verbose,
+                    mirror_flags=screening_mirror_flags,
+                )
+                self.population.sort(reverse=True)
+                screened_best = self.population[0].copy()
+                best_so_far = screened_best
+                self.population = self.population[: self.pop_size]
+
+                if verbose:
+                    status = self._term_status_text(int(screened_best.term))
+                    print(
+                        f"Screening best: {status} | "
+                        f"progress={screened_best.total_progress:.1f}% | "
+                        f"time={screened_best.time:.2f}s"
+                    )
+                    print(
+                        f"Downselected to {len(self.population)} individuals for TM training."
+                    )
+            self._pending_initial_downselect = False
 
         # Ensure global best artifact exists from the start (useful when resuming).
         if self.logger is not None and best_so_far is not None:
@@ -470,10 +603,26 @@ class EvolutionTrainer:
             current_generation = self.generation + 1
             if verbose:
                 print("\n" + "=" * 20)
-                print(f"Generation {current_generation}")
+                print(
+                    f"Generation {current_generation} | "
+                    f"mut_p={current_mutation_prob:.4f}, sigma={current_mutation_sigma:.4f}"
+                )
                 print("=" * 20)
 
-            _ = self.evaluate_population(verbose=verbose)
+            gen_mirror_flags = self._sample_mirror_flags(
+                len(self.population),
+                mirror_episode_prob=mirror_episode_prob,
+            )
+            if verbose and gen_mirror_flags.any():
+                print(
+                    f"Mirror flags this generation: "
+                    f"{int(gen_mirror_flags.sum())}/{len(self.population)}"
+                )
+
+            _ = self.evaluate_population(
+                verbose=verbose,
+                mirror_flags=gen_mirror_flags,
+            )
 
             progresses = np.array(
                 [float(ind.total_progress) for ind in self.population],
@@ -513,9 +662,7 @@ class EvolutionTrainer:
             history["time_best_global"].append(time_best_global)
 
             if verbose:
-                from_status = {1: "FINISH", 0: "TIMEOUT", -1: "CRASH"}.get(
-                    best_gen.term, str(best_gen.term)
-                )
+                from_status = self._term_status_text(int(best_gen.term))
                 print(
                     f"Best of generation: {from_status} | "
                     f"progress={dist_best_gen:.1f}% | time={best_gen.time:.2f}s"
@@ -561,8 +708,16 @@ class EvolutionTrainer:
             if local_gen < generations - 1:
                 self.next_generation(
                     elite_fraction=elite_fraction,
-                    mutation_prob=mutation_prob,
-                    mutation_sigma=mutation_sigma,
+                    mutation_prob=current_mutation_prob,
+                    mutation_sigma=current_mutation_sigma,
+                )
+                current_mutation_prob = max(
+                    mutation_prob_min,
+                    current_mutation_prob * mutation_prob_decay,
+                )
+                current_mutation_sigma = max(
+                    mutation_sigma_min,
+                    current_mutation_sigma * mutation_sigma_decay,
                 )
 
         self.best_individual = best_so_far
@@ -590,9 +745,16 @@ class EvolutionTrainer:
         genomes = data["genomes"].astype(np.float32)
         if genomes.ndim != 2:
             raise ValueError(f"Expected 2D genomes array, got shape {genomes.shape}.")
-        if genomes.shape[0] != self.pop_size:
+        loaded_pop_size = int(genomes.shape[0])
+        if loaded_pop_size < self.pop_size:
             raise ValueError(
-                f"Checkpoint pop_size={genomes.shape[0]}, expected {self.pop_size}."
+                f"Checkpoint pop_size={loaded_pop_size}, expected at least {self.pop_size}."
+            )
+        if loaded_pop_size > self.pop_size and assume_evaluated_generation:
+            raise ValueError(
+                "Checkpoint population is larger than trainer pop_size and is marked as "
+                "already evaluated. Use assume_evaluated_generation=False for initial "
+                "TM screening + downselect, or match pop_size exactly."
             )
 
         expected_genome_size = self.population[0].genome.shape[0]
@@ -608,12 +770,13 @@ class EvolutionTrainer:
         fitnesses = data["fitnesses"] if "fitnesses" in data.files else None
 
         restored_population: List[Individual] = []
-        for i in range(self.pop_size):
+        for i in range(loaded_pop_size):
             ind = Individual(
                 obs_dim=self.obs_dim,
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 genome=genomes[i],
+                action_scale=self.policy_action_scale,
             )
             if progresses is not None:
                 ind.total_progress = float(progresses[i])
@@ -635,6 +798,9 @@ class EvolutionTrainer:
             generation = int(np.asarray(data["generation"]).reshape(-1)[0])
         self.generation = generation
         self._loaded_checkpoint_evaluated = bool(assume_evaluated_generation)
+        self._pending_initial_downselect = (
+            (loaded_pop_size > self.pop_size) and (not assume_evaluated_generation)
+        )
 
         if "best_genome" in data.files:
             best = Individual(
@@ -642,6 +808,7 @@ class EvolutionTrainer:
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 genome=np.asarray(data["best_genome"], dtype=np.float32),
+                action_scale=self.policy_action_scale,
             )
             if "best_progress" in data.files:
                 best.total_progress = float(np.asarray(data["best_progress"]).reshape(-1)[0])
@@ -675,27 +842,64 @@ if __name__ == "__main__":
     map_name = "small_map"
     hidden_dim = 32
     act_dim = 3
-    pop_size = 16
+    pop_size = 32
     max_steps = RacingGameEnviroment.STEPS
-    generations_to_run = 50
+    env_max_time = 60
+    env_dt_ref = 1.0 / 100.0
+    env_dt_ratio_clip = 3.0
+    action_mode = "delta"
+    policy_action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
+    generations_to_run = 120
     checkpoint_every = 10
-
-    # Ak chceš pokračovať z checkpointu, nastav konkrétnu cestu.
-    resume_checkpoint: Optional[str] = None
+    mirror_episode_prob = 0.0
+    max_touches = 1
+    start_idle_max_time = 3.0
+    # Mutation annealing: start exploratory, finish more like fine-tuning.
+    mutation_prob = 0.2
+    mutation_prob_decay = 0.995
+    mutation_prob_min = 0.05
+    mutation_sigma = 1.0
+    mutation_sigma_decay = 0.98
+    mutation_sigma_min = 0.05
+    # Mini pretrain checkpoint -> TM evaluates it first, then continues with exploratory mutation
+    # (treated closer to a fresh TM run than a gentle fine-tune).
+    resume_checkpoint: Optional[str] = (
+        r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
+        r"\checkpoints\population_gen_0060.npz"
+    )
     # resume_checkpoint = EvolutionTrainer.find_latest_checkpoint()
-    # True = checkpoint je už "vyhodnotená generácia" (TM -> pokračovanie od ďalšej generácie)
-    # False = checkpoint ber ako počiatočnú populáciu (mini pretrain -> najprv vyhodnotiť v TM)
-    resume_assume_evaluated_generation = True
+    # True = TM checkpoint already evaluated in TM -> continue from next generation.
+    # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
+    resume_assume_evaluated_generation = False
 
-    env = RacingGameEnviroment(map_name=map_name, never_quit=False)
+    env = RacingGameEnviroment(
+        map_name=map_name,
+        never_quit=False,
+        action_mode=action_mode,
+        dt_ref=env_dt_ref,
+        dt_ratio_clip=env_dt_ratio_clip,
+        max_time=env_max_time,
+        max_touches=max_touches,
+        start_idle_max_time=start_idle_max_time,
+    )
     obs, info = env.reset()
     obs_dim = obs.shape[0]
 
     logger: Optional[TrainingLogger]
     if resume_checkpoint:
-        checkpoint_dir = os.path.dirname(resume_checkpoint)
-        run_dir = os.path.dirname(checkpoint_dir)
-        logger = TrainingLogger(run_dir=run_dir)
+        if resume_assume_evaluated_generation:
+            checkpoint_dir = os.path.dirname(resume_checkpoint)
+            run_dir = os.path.dirname(checkpoint_dir)
+            logger = TrainingLogger(run_dir=run_dir)
+        else:
+            source_checkpoint_name = os.path.splitext(os.path.basename(resume_checkpoint))[0]
+            source_run_name = os.path.basename(os.path.dirname(os.path.dirname(resume_checkpoint)))
+            run_name = (
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                f"_tm_finetune_map_{map_name}_h{hidden_dim}_p{pop_size}"
+                f"_src_{source_run_name}_{source_checkpoint_name}"
+            )
+            logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
     else:
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -710,6 +914,7 @@ if __name__ == "__main__":
         act_dim=act_dim,
         pop_size=pop_size,
         max_steps=max_steps,
+        policy_action_scale=policy_action_scale,
         logger=logger,
     )
 
@@ -720,16 +925,41 @@ if __name__ == "__main__":
                 assume_evaluated_generation=resume_assume_evaluated_generation,
             )
             print(f"Loaded checkpoint from generation {loaded_generation}: {resume_checkpoint}")
+            if not resume_assume_evaluated_generation:
+                trainer.generation = 0
+                print("Reset TM generation counter to 0 for fine-tuning.")
 
         history = trainer.run(
             generations=generations_to_run,
             elite_fraction=0.25,
-            mutation_prob=0.1,
-            mutation_sigma=0.05,
+            # Exploratory start + annealing toward fine-tuning.
+            mutation_prob=mutation_prob,
+            mutation_sigma=mutation_sigma,
+            mutation_prob_decay=mutation_prob_decay,
+            mutation_prob_min=mutation_prob_min,
+            mutation_sigma_decay=mutation_sigma_decay,
+            mutation_sigma_min=mutation_sigma_min,
+            mirror_episode_prob=mirror_episode_prob,
             verbose=True,
             dnf_time_for_plot=60.0,
             checkpoint_every=checkpoint_every,
-            training_config=dict(map_name=map_name),
+            training_config=dict(
+                map_name=map_name,
+                max_steps=max_steps,
+                env_max_time=env_max_time,
+                env_dt_ref=env_dt_ref,
+                env_dt_ratio_clip=env_dt_ratio_clip,
+                action_mode=action_mode,
+                policy_action_scale=policy_action_scale.tolist(),
+                finetune_from_checkpoint=resume_checkpoint,
+                mirror_episode_prob=mirror_episode_prob,
+                max_touches=max_touches,
+                start_idle_max_time=start_idle_max_time,
+                mutation_prob_decay=mutation_prob_decay,
+                mutation_prob_min=mutation_prob_min,
+                mutation_sigma_decay=mutation_sigma_decay,
+                mutation_sigma_min=mutation_sigma_min,
+            ),
         )
 
         if trainer.best_individual is not None:
