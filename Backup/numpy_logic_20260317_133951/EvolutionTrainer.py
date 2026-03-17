@@ -3,31 +3,11 @@ import glob
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional
 
 import numpy as np
 
-from EvolutionPolicy import EvolutionPolicy
 from Individual import Individual
-from ObservationEncoder import ObservationEncoder
-
-
-HiddenDims = Union[int, Sequence[int]]
-
-
-def normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
-    if isinstance(hidden_dim, (tuple, list)):
-        dims = tuple(int(dim) for dim in hidden_dim)
-    else:
-        dims = (int(hidden_dim),)
-    if not dims or any(dim <= 0 for dim in dims):
-        raise ValueError("hidden_dim must contain positive integers.")
-    return dims
-
-
-def hidden_dims_tag(hidden_dims: HiddenDims) -> str:
-    dims = normalize_hidden_dims(hidden_dims)
-    return "x".join(str(dim) for dim in dims)
 
 
 class TrainingLogger:
@@ -84,11 +64,8 @@ class TrainingLogger:
         self.generation_summary_path = os.path.join(run_dir, "generation_summary.csv")
         self.checkpoints_dir = os.path.join(run_dir, "checkpoints")
         self.best_individual_path = os.path.join(run_dir, "best_individual.npz")
-        self.best_individual_model_path = os.path.join(run_dir, "best_individual.pt")
         self.global_best_path = os.path.join(run_dir, "global_best.npz")
-        self.global_best_model_path = os.path.join(run_dir, "global_best.pt")
         self.final_population_path = os.path.join(run_dir, "final_population.npz")
-        self.final_population_model_path = os.path.join(run_dir, "final_population_best.pt")
 
         os.makedirs(self.checkpoints_dir, exist_ok=True)
         self._init_csv_if_missing(self.individual_metrics_path, self.INDIVIDUAL_HEADERS)
@@ -140,7 +117,7 @@ class TrainingLogger:
         population: List[Individual],
         generation: int,
         obs_dim: int,
-        hidden_dim: HiddenDims,
+        hidden_dim: int,
         act_dim: int,
         best_individual: Optional[Individual] = None,
     ) -> str:
@@ -169,18 +146,9 @@ class TrainingLogger:
             distances=distances,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
+            hidden_dim=np.array([hidden_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
-            hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
         )
-        hidden_dims = normalize_hidden_dims(hidden_dim)
-        if len(hidden_dims) == 1:
-            payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
-        if population:
-            payload.update(
-                action_scale=population[0].policy.action_scale.detach().cpu().numpy().astype(np.float32),
-                action_mode=np.array([population[0].policy.action_mode]),
-                hidden_activation=np.array([population[0].policy.hidden_activation]),
-            )
 
         if best_individual is not None:
             payload.update(
@@ -203,7 +171,7 @@ class TrainingLogger:
         population: List[Individual],
         generation: int,
         obs_dim: int,
-        hidden_dim: HiddenDims,
+        hidden_dim: int,
         act_dim: int,
         best_individual: Optional[Individual] = None,
     ) -> str:
@@ -229,26 +197,12 @@ class TrainingLogger:
             distances=distances,
             fitnesses=fitnesses,
             obs_dim=np.array([obs_dim], dtype=np.int32),
+            hidden_dim=np.array([hidden_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
-            hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
         )
-        hidden_dims = normalize_hidden_dims(hidden_dim)
-        if len(hidden_dims) == 1:
-            payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
-        if population:
-            payload.update(
-                action_scale=population[0].policy.action_scale.detach().cpu().numpy().astype(np.float32),
-                action_mode=np.array([population[0].policy.action_mode]),
-                hidden_activation=np.array([population[0].policy.hidden_activation]),
-            )
         if best_individual is not None:
             payload.update(best_genome=best_individual.genome.astype(np.float32))
         np.savez(final_path, **payload)
-        if best_individual is not None:
-            best_individual.policy.save(
-                self.final_population_model_path,
-                extra=self._policy_extra(best_individual, generation),
-            )
         return final_path
 
     def save_best_individual(self, best: Individual, generation: Optional[int] = None) -> str:
@@ -268,23 +222,7 @@ class TrainingLogger:
         np.savez(self.global_best_path, **payload)
         # Backward compatibility for older tooling.
         np.savez(self.best_individual_path, **payload)
-        extra = self._policy_extra(best, generation)
-        best.policy.save(self.global_best_model_path, extra=extra)
-        best.policy.save(self.best_individual_model_path, extra=extra)
         return self.global_best_path
-
-    @staticmethod
-    def _policy_extra(best: Individual, generation: Optional[int]) -> Dict:
-        extra: Dict = dict(
-            total_progress=float(best.total_progress),
-            time=float(best.time),
-            term=int(best.term),
-            distance=float(best.distance),
-            fitness=np.nan if best.fitness is None else float(best.fitness),
-        )
-        if generation is not None:
-            extra["generation"] = int(generation)
-        return extra
 
 
 class EvolutionTrainer:
@@ -292,35 +230,28 @@ class EvolutionTrainer:
         self,
         env,
         obs_dim: int,
-        hidden_dim: HiddenDims = 16,
+        hidden_dim: int = 16,
         act_dim: int = 3,
         pop_size: int = 16,
         max_steps: int = 2000,
         policy_action_scale: Optional[np.ndarray] = None,
-        policy_action_mode: str = "delta",
-        hidden_activation: str = "tanh",
         logger: Optional[TrainingLogger] = None,
     ) -> None:
         self.env = env
         self.obs_dim = obs_dim
-        self.hidden_dims = normalize_hidden_dims(hidden_dim)
-        self.hidden_dim = self.hidden_dims[0] if len(self.hidden_dims) == 1 else self.hidden_dims
+        self.hidden_dim = hidden_dim
         self.act_dim = act_dim
         self.pop_size = pop_size
         self.max_steps = max_steps
         self.policy_action_scale = None if policy_action_scale is None else np.asarray(policy_action_scale, dtype=np.float32)
-        self.policy_action_mode = str(policy_action_mode).strip().lower()
-        self.hidden_activation = str(hidden_activation).strip().lower()
         self.logger = logger
 
         self.population: List[Individual] = [
             Individual(
                 obs_dim,
-                self.hidden_dims,
+                hidden_dim,
                 act_dim,
                 action_scale=self.policy_action_scale,
-                action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
             )
             for _ in range(pop_size)
         ]
@@ -406,11 +337,34 @@ class EvolutionTrainer:
         return scalar
 
     def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
-        return ObservationEncoder.mirror_observation(obs)
+        x = np.asarray(obs, dtype=np.float32).copy()
+        if x.ndim != 1:
+            return x
+
+        num_lasers = int(getattr(self.env.car, "NUM_LASERS", 15))
+        sight_tiles = int(getattr(self.env.car, "SIGHT_TILES", 10))
+        min_expected = num_lasers + sight_tiles + 7
+        if x.shape[0] < min_expected:
+            return x
+
+        # [lasers][instructions][speed, side_speed, next_point_dir, dt_ratio][prev_action(3)]
+        x[:num_lasers] = x[:num_lasers][::-1]
+        instr_slice = slice(num_lasers, num_lasers + sight_tiles)
+        x[instr_slice] = -x[instr_slice]
+
+        aux_offset = num_lasers + sight_tiles
+        side_speed_idx = aux_offset + 1
+        prev_action_steer_idx = aux_offset + 6
+        x[side_speed_idx] = -x[side_speed_idx]
+        x[prev_action_steer_idx] = -x[prev_action_steer_idx]
+        return x
 
     @staticmethod
     def _mirror_action_delta(action: np.ndarray) -> np.ndarray:
-        return ObservationEncoder.mirror_action(action)
+        a = np.asarray(action, dtype=np.float32).copy()
+        if a.ndim == 1 and a.shape[0] >= 3:
+            a[2] = -a[2]
+        return a
 
     @staticmethod
     def _sample_mirror_flags(count: int, mirror_episode_prob: float) -> np.ndarray:
@@ -469,120 +423,6 @@ class EvolutionTrainer:
             new_population.append(child)
 
         self.population = new_population
-
-    def seed_population_from_model(
-        self,
-        model_path: str,
-        exact_copies: int = 1,
-        mutation_probs: Sequence[float] = (0.02, 0.05, 0.08),
-        mutation_sigmas: Sequence[float] = (0.01, 0.03, 0.05),
-        tier_counts: Optional[Sequence[int]] = None,
-    ) -> Dict[str, object]:
-        if len(mutation_probs) != len(mutation_sigmas):
-            raise ValueError("mutation_probs and mutation_sigmas must have the same length.")
-
-        loaded_policy, extra = EvolutionPolicy.load(model_path, map_location="cpu")
-        loaded_hidden_dims = tuple(int(dim) for dim in loaded_policy.hidden_dims)
-        if loaded_policy.obs_dim != self.obs_dim:
-            raise ValueError(
-                f"Model obs_dim={loaded_policy.obs_dim} does not match trainer obs_dim={self.obs_dim}."
-            )
-        if loaded_policy.act_dim != self.act_dim:
-            raise ValueError(
-                f"Model act_dim={loaded_policy.act_dim} does not match trainer act_dim={self.act_dim}."
-            )
-        if loaded_hidden_dims != self.hidden_dims:
-            raise ValueError(
-                f"Model hidden_dims={loaded_hidden_dims} do not match trainer hidden_dims={self.hidden_dims}."
-            )
-        if loaded_policy.action_mode != self.policy_action_mode:
-            raise ValueError(
-                f"Model action_mode='{loaded_policy.action_mode}' does not match "
-                f"trainer action_mode='{self.policy_action_mode}'."
-            )
-        if loaded_policy.hidden_activation != self.hidden_activation:
-            raise ValueError(
-                f"Model hidden_activation='{loaded_policy.hidden_activation}' does not match "
-                f"trainer hidden_activation='{self.hidden_activation}'."
-            )
-
-        loaded_scale = loaded_policy.action_scale.detach().cpu().numpy().astype(np.float32)
-        if self.policy_action_scale is None:
-            self.policy_action_scale = loaded_scale.copy()
-        elif not np.allclose(self.policy_action_scale, loaded_scale):
-            raise ValueError(
-                f"Model action_scale={loaded_scale.tolist()} does not match trainer "
-                f"action_scale={self.policy_action_scale.tolist()}."
-            )
-
-        base_individual = Individual(
-            obs_dim=self.obs_dim,
-            hidden_dim=self.hidden_dims,
-            act_dim=self.act_dim,
-            genome=loaded_policy.genome.copy(),
-            action_scale=self.policy_action_scale.copy(),
-            action_mode=self.policy_action_mode,
-            hidden_activation=self.hidden_activation,
-        )
-
-        exact_copies = int(max(0, exact_copies))
-        if exact_copies > self.pop_size:
-            raise ValueError(
-                f"exact_copies={exact_copies} exceeds population size {self.pop_size}."
-            )
-
-        remaining = self.pop_size - exact_copies
-        num_tiers = len(mutation_probs)
-        if tier_counts is None:
-            tier_counts = [remaining // num_tiers for _ in range(num_tiers)]
-            for i in range(remaining % num_tiers):
-                tier_counts[i] += 1
-        else:
-            tier_counts = [int(count) for count in tier_counts]
-            if len(tier_counts) != num_tiers:
-                raise ValueError("tier_counts length must match number of mutation tiers.")
-            if sum(tier_counts) != remaining:
-                raise ValueError(
-                    f"tier_counts sum to {sum(tier_counts)}, expected remaining population size {remaining}."
-                )
-
-        seeded_population: List[Individual] = [base_individual.copy() for _ in range(exact_copies)]
-        tier_summaries = []
-        for count, prob, sigma in zip(tier_counts, mutation_probs, mutation_sigmas):
-            count = int(count)
-            if count <= 0:
-                continue
-            for _ in range(count):
-                child = base_individual.copy()
-                child.mutate(mutation_prob=float(prob), sigma=float(sigma))
-                seeded_population.append(child)
-            tier_summaries.append(
-                dict(
-                    count=count,
-                    mutation_prob=float(prob),
-                    mutation_sigma=float(sigma),
-                )
-            )
-
-        if len(seeded_population) != self.pop_size:
-            raise RuntimeError(
-                f"Seeded population has size {len(seeded_population)}, expected {self.pop_size}."
-            )
-
-        self.population = seeded_population
-        self.best_individual = None
-        self.generation = 0
-        self._loaded_checkpoint_evaluated = False
-        self._pending_initial_downselect = False
-
-        return dict(
-            source_model=model_path,
-            exact_copies=exact_copies,
-            tiers=tier_summaries,
-            model_extra=extra,
-            hidden_dims=list(self.hidden_dims),
-            action_mode=self.policy_action_mode,
-        )
 
     def _log_generation(
         self,
@@ -675,8 +515,6 @@ class EvolutionTrainer:
                 act_dim=self.act_dim,
                 pop_size=self.pop_size,
                 max_steps=self.max_steps,
-                policy_action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
                 run_started_utc=TrainingLogger._timestamp_utc(),
                 start_generation=self.generation,
                 generations_requested=generations,
@@ -925,21 +763,6 @@ class EvolutionTrainer:
                 f"Checkpoint genome_size={genomes.shape[1]}, expected {expected_genome_size}."
             )
 
-        checkpoint_hidden_dims: Optional[Tuple[int, ...]] = None
-        if "hidden_dims" in data.files:
-            checkpoint_hidden_dims = tuple(
-                int(value) for value in np.asarray(data["hidden_dims"]).reshape(-1)
-            )
-        elif "hidden_dim" in data.files:
-            checkpoint_hidden_dims = (
-                int(np.asarray(data["hidden_dim"]).reshape(-1)[0]),
-            )
-        if checkpoint_hidden_dims is not None and checkpoint_hidden_dims != self.hidden_dims:
-            raise ValueError(
-                f"Checkpoint hidden_dims={checkpoint_hidden_dims} do not match "
-                f"trainer hidden_dims={self.hidden_dims}."
-            )
-
         progresses = data["progresses"] if "progresses" in data.files else None
         times = data["times"] if "times" in data.files else None
         terms = data["terms"] if "terms" in data.files else None
@@ -954,8 +777,6 @@ class EvolutionTrainer:
                 act_dim=self.act_dim,
                 genome=genomes[i],
                 action_scale=self.policy_action_scale,
-                action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
             )
             if progresses is not None:
                 ind.total_progress = float(progresses[i])
@@ -988,8 +809,6 @@ class EvolutionTrainer:
                 act_dim=self.act_dim,
                 genome=np.asarray(data["best_genome"], dtype=np.float32),
                 action_scale=self.policy_action_scale,
-                action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
             )
             if "best_progress" in data.files:
                 best.total_progress = float(np.asarray(data["best_progress"]).reshape(-1)[0])
@@ -1030,7 +849,6 @@ if __name__ == "__main__":
     env_dt_ratio_clip = 3.0
     action_mode = "delta"
     policy_action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
-    hidden_activation = "tanh"
     generations_to_run = 120
     checkpoint_every = 10
     mirror_episode_prob = 0.0
@@ -1043,44 +861,16 @@ if __name__ == "__main__":
     mutation_sigma = 1.0
     mutation_sigma_decay = 0.98
     mutation_sigma_min = 0.05
-    initial_population_source: Optional[str] = None
-    # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
-    # initial_population_source = (
-    #     r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
-    #     r"\checkpoints\population_gen_0060.npz"
-    # )
-    seed_model_exact_copies = 1
-    seed_model_mutation_probs = (0.02, 0.05, 0.08)
-    seed_model_mutation_sigmas = (0.01, 0.03, 0.05)
+    # Mini pretrain checkpoint -> TM evaluates it first, then continues with exploratory mutation
+    # (treated closer to a fresh TM run than a gentle fine-tune).
+    resume_checkpoint: Optional[str] = (
+        r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
+        r"\checkpoints\population_gen_0060.npz"
+    )
+    # resume_checkpoint = EvolutionTrainer.find_latest_checkpoint()
     # True = TM checkpoint already evaluated in TM -> continue from next generation.
     # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
     resume_assume_evaluated_generation = False
-
-    resume_checkpoint: Optional[str] = None
-    seed_model_path: Optional[str] = None
-    initial_population_source_kind = "random"
-    if initial_population_source:
-        source_ext = os.path.splitext(initial_population_source)[1].lower()
-        if source_ext == ".pt":
-            seed_model_path = initial_population_source
-            initial_population_source_kind = "model_seed"
-        elif source_ext == ".npz":
-            resume_checkpoint = initial_population_source
-            initial_population_source_kind = "population_checkpoint"
-        else:
-            raise ValueError(
-                "initial_population_source must point to a .pt model or .npz population checkpoint."
-            )
-
-    if seed_model_path:
-        seed_policy, _ = EvolutionPolicy.load(seed_model_path, map_location="cpu")
-        hidden_dim = seed_policy.hidden_dims
-        act_dim = seed_policy.act_dim
-        action_mode = seed_policy.action_mode
-        hidden_activation = seed_policy.hidden_activation
-        policy_action_scale = (
-            seed_policy.action_scale.detach().cpu().numpy().astype(np.float32)
-        )
 
     env = RacingGameEnviroment(
         map_name=map_name,
@@ -1106,22 +896,14 @@ if __name__ == "__main__":
             source_run_name = os.path.basename(os.path.dirname(os.path.dirname(resume_checkpoint)))
             run_name = (
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                f"_tm_finetune_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+                f"_tm_finetune_map_{map_name}_h{hidden_dim}_p{pop_size}"
                 f"_src_{source_run_name}_{source_checkpoint_name}"
             )
             logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
-    elif seed_model_path:
-        source_model_name = os.path.splitext(os.path.basename(seed_model_path))[0]
-        run_name = (
-            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_tm_seed_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
-            f"_src_{source_model_name}"
-        )
-        logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
     else:
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_map_{map_name}_h{hidden_dim}_p{pop_size}"
         )
         logger = TrainingLogger(run_name=run_name)
 
@@ -1133,8 +915,6 @@ if __name__ == "__main__":
         pop_size=pop_size,
         max_steps=max_steps,
         policy_action_scale=policy_action_scale,
-        policy_action_mode=action_mode,
-        hidden_activation=hidden_activation,
         logger=logger,
     )
 
@@ -1148,15 +928,6 @@ if __name__ == "__main__":
             if not resume_assume_evaluated_generation:
                 trainer.generation = 0
                 print("Reset TM generation counter to 0 for fine-tuning.")
-        elif seed_model_path:
-            seed_summary = trainer.seed_population_from_model(
-                model_path=seed_model_path,
-                exact_copies=seed_model_exact_copies,
-                mutation_probs=seed_model_mutation_probs,
-                mutation_sigmas=seed_model_mutation_sigmas,
-            )
-            print(f"Seeded population from model: {seed_model_path}")
-            print(f"Seed summary: {seed_summary}")
 
         history = trainer.run(
             generations=generations_to_run,
@@ -1180,14 +951,7 @@ if __name__ == "__main__":
                 env_dt_ratio_clip=env_dt_ratio_clip,
                 action_mode=action_mode,
                 policy_action_scale=policy_action_scale.tolist(),
-                hidden_activation=hidden_activation,
                 finetune_from_checkpoint=resume_checkpoint,
-                initial_population_source=initial_population_source,
-                initial_population_source_kind=initial_population_source_kind,
-                seed_model_path=seed_model_path,
-                seed_model_exact_copies=seed_model_exact_copies,
-                seed_model_mutation_probs=list(seed_model_mutation_probs),
-                seed_model_mutation_sigmas=list(seed_model_mutation_sigmas),
                 mirror_episode_prob=mirror_episode_prob,
                 max_touches=max_touches,
                 start_idle_max_time=start_idle_max_time,

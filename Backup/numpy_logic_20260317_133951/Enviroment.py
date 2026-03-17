@@ -6,7 +6,6 @@ import time
 
 from Car import Car
 from Map import Map
-from ObservationEncoder import ObservationEncoder
 
 
 class RacingGameEnviroment(gym.Env):
@@ -38,21 +37,35 @@ class RacingGameEnviroment(gym.Env):
     ) -> None:
         super().__init__()
         print("Creating the RacingGameEnviroment")
-        self.obs_encoder = ObservationEncoder(
-            dt_ref=dt_ref,
-            dt_ratio_clip=dt_ratio_clip,
-        )
-        self.dt_ref = self.obs_encoder.dt_ref
-        self.dt_ratio_clip = self.obs_encoder.dt_ratio_clip
-        action_mode = str(action_mode).strip().lower()
-        if action_mode not in {"delta", "target"}:
-            raise ValueError("action_mode must be 'delta' or 'target'.")
-        self.action_mode = action_mode
+        # Observation normalization constants (kept explicit for easier tuning).
+        self.laser_max_distance = 320.0
+        self.path_instruction_abs_max = 4.0
+        self.speed_abs_max = 1000.0
+        self.side_speed_abs_max = 1000.0
+        self.dt_ref = float(dt_ref)
+        if not np.isfinite(self.dt_ref) or self.dt_ref <= 0.0:
+            raise ValueError("dt_ref must be a positive finite number.")
+        self.dt_ratio_clip = float(dt_ratio_clip)
+        if not np.isfinite(self.dt_ratio_clip) or self.dt_ratio_clip <= 0.0:
+            raise ValueError("dt_ratio_clip must be a positive finite number.")
 
         # Observations:
         # [lasers N] + [path instructions M] + [speed, side_speed, next_point_dir, dt_ratio] + [prev action 3]
-        obs_dim = self.obs_encoder.obs_dim
-        obs_low, obs_high = self.obs_encoder.get_observation_bounds(action_mode=self.action_mode)
+        obs_dim = Car.NUM_LASERS + Car.SIGHT_TILES + 7
+        obs_low = np.array(
+            [0.0] * Car.NUM_LASERS
+            + [-1.0] * Car.SIGHT_TILES
+            + [-1.0, -1.0, -1.0, 0.0]
+            + [-1.0, -1.0, -1.0],
+            dtype=np.float32,
+        )
+        obs_high = np.array(
+            [1.0] * Car.NUM_LASERS
+            + [1.0] * Car.SIGHT_TILES
+            + [1.0, 1.0, 1.0, self.dt_ratio_clip]
+            + [1.0, 1.0, 1.0],
+            dtype=np.float32,
+        )
         self.observation_space = gym.spaces.Box(
             low=obs_low,
             high=obs_high,
@@ -60,18 +73,18 @@ class RacingGameEnviroment(gym.Env):
             dtype=np.float32,
         )
 
+        action_mode = str(action_mode).strip().lower()
+        if action_mode not in {"delta", "target"}:
+            raise ValueError("action_mode must be 'delta' or 'target'.")
+        self.action_mode = action_mode
+
         # Action semantics:
         # - delta: per-step action delta (legacy behavior)
         # - target: policy output is treated as direct target action
         if self.action_mode == "delta":
             self.action_space = gym.spaces.Box(low=-0.2, high=0.2, shape=(3,), dtype=np.float32)
         else:
-            self.action_space = gym.spaces.Box(
-                low=np.array([0.0, 0.0, -1.0], dtype=np.float32),
-                high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
-                shape=(3,),
-                dtype=np.float32,
-            )
+            self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         #self.action_space = gym.spaces.Discrete(8)
         
         # Create the car and the map
@@ -107,6 +120,7 @@ class RacingGameEnviroment(gym.Env):
         self._stall_touch_latched = False
         self._wall_contact_since_time = None
         self._stuck_since_time = None
+        self.previous_game_time = None
         self.current_dt_ratio = 1.0
 
     
@@ -115,7 +129,7 @@ class RacingGameEnviroment(gym.Env):
         super().reset(seed=seed)
         self.reset_game()
         self.current_step = 0
-        self.obs_encoder.reset()
+        self.previous_game_time = None
         self.current_dt_ratio = 1.0
         self.previous_observation_info = distances, instructions, info = self.observation_info()
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -307,18 +321,68 @@ class RacingGameEnviroment(gym.Env):
     def observation_info(self):
         return self.car.get_data()
 
+    def _fit_vector(self, values, expected_size: int, pad_value: float):
+        v = np.asarray(values, dtype=np.float32).reshape(-1)
+        if v.size < expected_size:
+            v = np.pad(v, (0, expected_size - v.size), constant_values=pad_value)
+        elif v.size > expected_size:
+            v = v[:expected_size]
+        return v
+
     def build_observation(self, distances, instructions, info):
-        observation = self.obs_encoder.build_observation(
-            distances=distances,
-            instructions=instructions,
-            info=info,
-            previous_action=self.previous_action,
+        distances_vec = self._fit_vector(
+            values=distances,
+            expected_size=Car.NUM_LASERS,
+            pad_value=self.laser_max_distance,
         )
-        self.current_dt_ratio = self.obs_encoder.current_dt_ratio
-        return observation
+        instructions_vec = self._fit_vector(
+            values=instructions,
+            expected_size=Car.SIGHT_TILES,
+            pad_value=0.0,
+        )
+
+        # Normalize to stable ranges for tanh-based policy.
+        distances_norm = np.clip(distances_vec / self.laser_max_distance, 0.0, 1.0)
+        instructions_norm = np.clip(
+            instructions_vec / self.path_instruction_abs_max, -1.0, 1.0
+        )
+        speed_norm = float(
+            np.clip(info.get("speed", 0.0) / self.speed_abs_max, -1.0, 1.0)
+        )
+        side_speed_norm = float(
+            np.clip(info.get("side_speed", 0.0) / self.side_speed_abs_max, -1.0, 1.0)
+        )
+        next_point_direction = float(
+            np.clip(info.get("next_point_direction", 1.0), -1.0, 1.0)
+        )
+        dt_ratio = self._update_dt_ratio(float(info.get("time", 0.0)))
+        info["dt_ratio"] = dt_ratio
+
+        return np.concatenate(
+            [
+                distances_norm,
+                instructions_norm,
+                np.array(
+                    [speed_norm, side_speed_norm, next_point_direction, dt_ratio],
+                    dtype=np.float32,
+                ),
+                self.previous_action.astype(np.float32, copy=False),
+            ]
+        ).astype(np.float32, copy=False)
 
     def _update_dt_ratio(self, current_time: float) -> float:
-        dt_ratio = self.obs_encoder.update_dt_ratio(current_time)
+        current_time = float(current_time)
+        dt = self.dt_ref
+        if np.isfinite(current_time) and current_time >= 0.0:
+            if (
+                self.previous_game_time is not None
+                and np.isfinite(self.previous_game_time)
+                and current_time >= float(self.previous_game_time)
+            ):
+                dt = max(1e-6, current_time - float(self.previous_game_time))
+            self.previous_game_time = current_time
+
+        dt_ratio = float(np.clip(dt / self.dt_ref, 0.0, self.dt_ratio_clip))
         self.current_dt_ratio = dt_ratio
         return dt_ratio
     
@@ -337,16 +401,19 @@ class RacingGameEnviroment(gym.Env):
             action = self.previous_action + scaled_delta
             action = np.clip(action, -1.0, 1.0)
         else:
+            # Experimental target mode:
+            # - policy outputs are expected in [-1, 1]
+            # - gas/brake are thresholded to binary triggers (0/1) after remap to [0, 1]
+            #   so near-zero outputs can still produce decisive throttle/brake actions
+            # - keep steer in [-1, 1]
+            # Neutral output (0) maps to 0.5 and stays released because threshold uses > 0.5.
             gas01 = 0.5 * (float(action_input[0]) + 1.0)
             brake01 = 0.5 * (float(action_input[1]) + 1.0)
-            if 0.0 <= float(action_input[0]) <= 1.0 and 0.0 <= float(action_input[1]) <= 1.0:
-                gas01 = float(action_input[0])
-                brake01 = float(action_input[1])
             action = np.array(
                 [
-                    float(np.clip(gas01, 0.0, 1.0)),
-                    float(np.clip(brake01, 0.0, 1.0)),
-                    float(np.clip(action_input[2], -1.0, 1.0)),
+                    1.0 if gas01 > 0.5 else 0.0,
+                    1.0 if brake01 > 0.5 else 0.0,
+                    action_input[2],
                 ],
                 dtype=np.float32,
             )
