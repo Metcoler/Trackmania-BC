@@ -1,0 +1,7 @@
+attempt_index,saved,num_frames,finish_time,total_progress,distance,path
+1,0,316,-1.4800000190734863,0.0,0.0,
+2,0,53,0.6200000047683716,0.0,2.895494222640991,
+3,1,1765,17.059999465942383,100.0,923.0099487304688,logs/supervised_data\20260317_230533_map_small_map_target_dataset\attempts\attempt_0003.npz
+4,0,917,8.960000038146973,41.37931034482759,355.7653503417969,
+5,1,1639,16.850000381469727,100.0,921.576416015625,logs/supervised_data\20260317_230533_map_small_map_target_dataset\attempts\attempt_0005.npz
+6,1,1601,16.389999389648438,100.0,912.0562133789062,logs/supervised_data\20260317_230533_map_small_map_target_dataset\attempts\attempt_0006.npz

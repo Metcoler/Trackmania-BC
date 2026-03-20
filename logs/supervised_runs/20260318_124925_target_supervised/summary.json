@@ -1,0 +1,113 @@
+{
+  "created_utc": "2026-03-18T11:49:33Z",
+  "data_root": "logs/supervised_data",
+  "all_attempt_files": [
+    "logs/supervised_data\\20260317_225207_map_AI Training #2_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data\\20260317_225719_map_AI Training #3_target_dataset\\attempts\\attempt_0008.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0007.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0015.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0016.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0003.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0005.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0006.npz"
+  ],
+  "dataset_stats": {
+    "attempt_files": 8,
+    "total_frames_before_filter": 29902,
+    "boring_frames_before_filter": 6628,
+    "frames_after_filter_before_cap": 23908,
+    "frames_after_cap_before_mirror": 23908,
+    "frames_final": 47816,
+    "apply_boring_filter": true,
+    "apply_frame_cap": false,
+    "augment_mirror": true,
+    "per_attempt": [
+      {
+        "path": "logs/supervised_data\\20260317_225207_map_AI Training #2_target_dataset\\attempts\\attempt_0002.npz",
+        "raw_frames": 14395,
+        "boring_frames": 2898,
+        "frames_after_filter": 11798,
+        "frames_after_cap": 11798,
+        "final_frames": 23596
+      },
+      {
+        "path": "logs/supervised_data\\20260317_225719_map_AI Training #3_target_dataset\\attempts\\attempt_0008.npz",
+        "raw_frames": 6547,
+        "boring_frames": 1330,
+        "frames_after_filter": 5340,
+        "frames_after_cap": 5340,
+        "final_frames": 10680
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0007.npz",
+        "raw_frames": 1343,
+        "boring_frames": 254,
+        "frames_after_filter": 1114,
+        "frames_after_cap": 1114,
+        "final_frames": 2228
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0015.npz",
+        "raw_frames": 1264,
+        "boring_frames": 218,
+        "frames_after_filter": 1070,
+        "frames_after_cap": 1070,
+        "final_frames": 2140
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0016.npz",
+        "raw_frames": 1348,
+        "boring_frames": 288,
+        "frames_after_filter": 1081,
+        "frames_after_cap": 1081,
+        "final_frames": 2162
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0003.npz",
+        "raw_frames": 1765,
+        "boring_frames": 586,
+        "frames_after_filter": 1225,
+        "frames_after_cap": 1225,
+        "final_frames": 2450
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0005.npz",
+        "raw_frames": 1639,
+        "boring_frames": 546,
+        "frames_after_filter": 1150,
+        "frames_after_cap": 1150,
+        "final_frames": 2300
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0006.npz",
+        "raw_frames": 1601,
+        "boring_frames": 508,
+        "frames_after_filter": 1130,
+        "frames_after_cap": 1130,
+        "final_frames": 2260
+      }
+    ]
+  },
+  "obs_dim": 32,
+  "act_dim": 3,
+  "hidden_dims": [
+    16
+  ],
+  "hidden_activation": "relu",
+  "batch_size": 4096,
+  "batch_size_override": null,
+  "num_workers": 4,
+  "pin_memory": true,
+  "amp_enabled": true,
+  "epochs": 10,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "train_boring_keep_probability": 0.1,
+  "train_max_frames_after_filter": null,
+  "best_epoch": 10,
+  "best_train_loss": 0.13270113685866233,
+  "best_model_path": "logs/supervised_runs\\20260318_124925_target_supervised\\best_model.pt",
+  "curve_path": "logs/supervised_runs\\20260318_124925_target_supervised\\loss_curve.png",
+  "device": "cuda",
+  "random_seed": 51951
+}

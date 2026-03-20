@@ -8,42 +8,31 @@
     ".NETCoreApp,Version=v7.0": {
       "C# test/1.0.0": {
         "dependencies": {
-          "GBX.NET": "1.2.2",
-          "GBX.NET.LZO": "1.0.3",
-          "GBX.NET.PAK": "1.1.2"
+          "GBX.NET": "1.2.12",
+          "GBX.NET.LZO": "1.0.4"
         },
         "runtime": {
           "C# test.dll": {}
         }
       },
-      "GBX.NET/1.2.2": {
+      "GBX.NET/1.2.12": {
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "7.0.0",
-          "TmEssentials": "2.3.2"
+          "System.IO.Hashing": "8.0.0",
+          "TmEssentials": "2.4.1"
         },
         "runtime": {
           "lib/net7.0/GBX.NET.dll": {
-            "assemblyVersion": "1.2.2.0",
-            "fileVersion": "1.2.2.0"
+            "assemblyVersion": "1.2.12.0",
+            "fileVersion": "1.2.12.0"
           }
         }
       },
-      "GBX.NET.LZO/1.0.3": {
+      "GBX.NET.LZO/1.0.4": {
         "runtime": {
           "lib/net7.0/GBX.NET.LZO.dll": {
-            "assemblyVersion": "1.0.3.0",
-            "fileVersion": "1.0.3.0"
-          }
-        }
-      },
-      "GBX.NET.PAK/1.1.2": {
-        "dependencies": {
-          "GBX.NET": "1.2.2"
-        },
-        "runtime": {
-          "lib/net7.0/GBX.NET.PAK.dll": {
-            "assemblyVersion": "1.1.2.0",
-            "fileVersion": "1.1.2.0"
+            "assemblyVersion": "1.0.4.0",
+            "fileVersion": "1.0.4.0"
           }
         }
       },
@@ -55,11 +44,19 @@
           }
         }
       },
-      "TmEssentials/2.3.2": {
+      "System.IO.Hashing/8.0.0": {
         "runtime": {
-          "lib/net6.0/TmEssentials.dll": {
-            "assemblyVersion": "2.3.2.0",
-            "fileVersion": "2.3.2.0"
+          "lib/net7.0/System.IO.Hashing.dll": {
+            "assemblyVersion": "8.0.0.0",
+            "fileVersion": "8.0.23.53103"
+          }
+        }
+      },
+      "TmEssentials/2.4.1": {
+        "runtime": {
+          "lib/net7.0/TmEssentials.dll": {
+            "assemblyVersion": "2.4.1.0",
+            "fileVersion": "2.4.1.0"
           }
         }
       }
@@ -71,26 +68,19 @@
       "serviceable": false,
       "sha512": ""
     },
-    "GBX.NET/1.2.2": {
+    "GBX.NET/1.2.12": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-wg4uwKFF1mPl6lGWyeFyVn8GmERW1C8b20sQYz+ADmNRwFfl4bzvOZLoafiLxjhhmlIhJVVyA8liqPld7C+TlA==",
-      "path": "gbx.net/1.2.2",
-      "hashPath": "gbx.net.1.2.2.nupkg.sha512"
+      "sha512": "sha512-P0yV1ZJUrStbVzlHxPsau7ECUYOfi9Z4LfUkwVvcedqjLLV96F7iiifRaoLRY5n7AoMkDlaXXl056ewRVKlQ4w==",
+      "path": "gbx.net/1.2.12",
+      "hashPath": "gbx.net.1.2.12.nupkg.sha512"
     },
-    "GBX.NET.LZO/1.0.3": {
+    "GBX.NET.LZO/1.0.4": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-4b/gfyCx4ItsYIj3ukgB+2GFgz+t7sZerh31jxLOiFM+dvznoZ1oerNg8y3Fo8uy+FLTlT5HaTgeZB8hIF3Vcg==",
-      "path": "gbx.net.lzo/1.0.3",
-      "hashPath": "gbx.net.lzo.1.0.3.nupkg.sha512"
-    },
-    "GBX.NET.PAK/1.1.2": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-KHwdyfTQICtslNi12ODnqRmw7nYuKcEKx8yge+w/NAQNld/kd5ZjFclNl8qGv2sHj707mu0s8KWtXXdsgi+WiQ==",
-      "path": "gbx.net.pak/1.1.2",
-      "hashPath": "gbx.net.pak.1.1.2.nupkg.sha512"
+      "sha512": "sha512-52C5Fc2Exm3RK+vfui4exnYlvIa+oV3WFm3blefcwqAHx3NEQ5aUUO5C3HatbrXQ51trRPtriavMkg/zxBGKNA==",
+      "path": "gbx.net.lzo/1.0.4",
+      "hashPath": "gbx.net.lzo.1.0.4.nupkg.sha512"
     },
     "Microsoft.Extensions.Logging.Abstractions/7.0.0": {
       "type": "package",
@@ -99,12 +89,19 @@
       "path": "microsoft.extensions.logging.abstractions/7.0.0",
       "hashPath": "microsoft.extensions.logging.abstractions.7.0.0.nupkg.sha512"
     },
-    "TmEssentials/2.3.2": {
+    "System.IO.Hashing/8.0.0": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-YTlWJQdROADpnL5eTvMGu8gjKA95p93U90hznZgnzUCxqIppmRgYX6cmw11cGyhglSOmonXJRvd2YK8g75bdPg==",
-      "path": "tmessentials/2.3.2",
-      "hashPath": "tmessentials.2.3.2.nupkg.sha512"
+      "sha512": "sha512-ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA==",
+      "path": "system.io.hashing/8.0.0",
+      "hashPath": "system.io.hashing.8.0.0.nupkg.sha512"
+    },
+    "TmEssentials/2.4.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-K/RWlvnwJfLEH5gs1XA7d9wTvfXLexUBOA8W3N00ucrEqSQMwJbPhrPZJhzI2w5DRGJuAiEr7uXzZTCHEvtGWw==",
+      "path": "tmessentials/2.4.1",
+      "hashPath": "tmessentials.2.4.1.nupkg.sha512"
     }
   }
 }

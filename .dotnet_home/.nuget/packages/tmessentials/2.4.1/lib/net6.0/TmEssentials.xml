@@ -1,0 +1,851 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>TmEssentials</name>
+    </assembly>
+    <members>
+        <member name="T:TmEssentials.AccountUtils">
+            <summary>
+            Provides utility methods for Trackmania accounts.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.AccountUtils.ToLogin(System.Guid)">
+            <summary>
+            Converts an account ID to a login representation.
+            </summary>
+            <param name="accountId">The account ID to be converted.</param>
+            <returns>A login representation of the account ID.</returns>
+        </member>
+        <member name="M:TmEssentials.AccountUtils.ToAccountId(System.String)">
+            <summary>
+            Converts a login to an account ID.
+            </summary>
+            <param name="login">The login to be converted.</param>
+            <returns>An account ID of the login.</returns>
+            <exception cref="T:System.ArgumentNullException">Login is null.</exception>
+            <exception cref="T:System.FormatException">Login is invalid.</exception>
+        </member>
+        <member name="T:TmEssentials.HttpClientExtensions">
+            <summary>
+            Provides extension methods for <see cref="T:System.Net.Http.HttpClient"/> to enhance its functionality.
+            This includes a method for sending a HEAD request asynchronously.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.HttpClientExtensions.HeadAsync(System.Net.Http.HttpClient,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send a HEAD request to the specified Uri as an asynchronous operation.
+            </summary>
+            <param name="http">HttpClient.</param>
+            <param name="requestUri">The Uri the request is sent to.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <returns>The task object representing the asynchronous operation.</returns>
+        </member>
+        <member name="M:TmEssentials.HttpClientExtensions.HeadAsync(System.Net.Http.HttpClient,System.Uri,System.Threading.CancellationToken)">
+            <summary>
+            Send a HEAD request to the specified Uri as an asynchronous operation.
+            </summary>
+            <param name="http">HttpClient.</param>
+            <param name="requestUri">The Uri the request is sent to.</param>
+            <param name="cancellationToken">Cancellation token.</param>
+            <returns>The task object representing the asynchronous operation.</returns>
+        </member>
+        <member name="T:TmEssentials.ITime">
+            <summary>
+            Represents a time value and provides methods for time calculations and comparisons.
+            This interface allows for the manipulation and comparison of time values, 
+            including support for basic arithmetic operations and conversions.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Days">
+            <summary>
+            Gets the number of whole days.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Hours">
+            <summary>
+            Gets the number of whole hours.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Milliseconds">
+            <summary>
+            Gets the number of milliseconds.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Minutes">
+            <summary>
+            Gets the number of whole minutes.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Seconds">
+            <summary>
+            Gets the number of whole seconds.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.Ticks">
+            <summary>
+            Gets the number of ticks.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.TotalDays">
+            <summary>
+            Gets the total number of days, as a floating-point value.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.TotalHours">
+            <summary>
+            Gets the total number of hours, as a floating-point value.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.TotalMilliseconds">
+            <summary>
+            Gets the total number of milliseconds, as a floating-point value.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.TotalMinutes">
+            <summary>
+            Gets the total number of minutes, as a floating-point value.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.TotalSeconds">
+            <summary>
+            Gets the total number of seconds, as a floating-point value.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.ITime.IsNegative">
+            <summary>
+            Indicates whether the time value is negative.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.ITime.Add(TmEssentials.ITime)">
+            <summary>
+            Adds the specified <see cref="T:TmEssentials.ITime"/> to this instance.
+            </summary>
+            <param name="ts">An <see cref="T:TmEssentials.ITime"/> instance to add.</param>
+            <returns>A new <see cref="T:TmEssentials.ITime"/> instance representing the sum.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.Divide(System.Single)">
+            <summary>
+            Divides this instance by the specified divisor.
+            </summary>
+            <param name="divisor">The divisor.</param>
+            <returns>A new ITime instance representing the quotient.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.Divide(TmEssentials.ITime)">
+            <summary>
+            Divides this instance by the specified ITime value.
+            </summary>
+            <param name="ts">An <see cref="T:TmEssentials.ITime"/> instance to divide by.</param>
+            <returns>The quotient as a floating-point value.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.Duration">
+            <summary>
+            Returns the absolute value of this instance.
+            </summary>
+            <returns>A new <see cref="T:TmEssentials.ITime"/> instance representing the duration.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.Multiply(System.Single)">
+            <summary>
+            Multiplies this instance by the specified factor.
+            </summary>
+            <param name="factor">The factor to multiply by.</param>
+            <returns>A new <see cref="T:TmEssentials.ITime"/> instance representing the product.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.Negate">
+            <summary>
+            Negates this time value.
+            </summary>
+            <returns>A new <see cref="T:TmEssentials.ITime"/> instance with the negated value.</returns>
+        </member>
+        <member name="M:TmEssentials.ITime.ToString(System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format.
+            </summary>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="T:TmEssentials.TextFormatter">
+            <summary>
+            Provides a set of methods for text formatting in Trackmania and Shootmania.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TextFormatter.Deformat(System.String)">
+            <summary>
+            Deformats a string from Trackmania/Shootmania format.
+            </summary>
+            <param name="input">A string input.</param>
+            <returns>A deformatted string.</returns>
+            <exception cref="T:System.ArgumentNullException">Input is null.</exception>
+            <exception cref="T:System.Text.RegularExpressions.RegexMatchTimeoutException">Regex match timeout.</exception>
+        </member>
+        <member name="M:TmEssentials.TextFormatter.Deformat(System.String,System.Int32)">
+            <summary>
+            Deformats a string from Trackmania/Shootmania format.
+            </summary>
+            <param name="input">A string input.</param>
+            <param name="maxReplacementCount">The maximum number of deformat actions (replacements) to make.</param>
+            <returns>A deformatted string.</returns>
+            <exception cref="T:System.ArgumentNullException">Input is null.</exception>
+            <exception cref="T:System.Text.RegularExpressions.RegexMatchTimeoutException">Regex match timeout.</exception>
+        </member>
+        <member name="M:TmEssentials.TextFormatter.FormatAnsi(System.String)">
+            <summary>
+            Formats a string to ANSI format.
+            </summary>
+            <param name="input"></param>
+            <returns></returns>
+            <exception cref="T:System.ArgumentNullException">Input is null.</exception>
+            <exception cref="T:System.Text.RegularExpressions.RegexMatchTimeoutException">Regex match timeout.</exception>
+        </member>
+        <member name="T:TmEssentials.TimeInt32">
+            <summary>
+            Represents a time interval as a 32-bit integer, with <paramref name="TotalMilliseconds"/> as the unit.
+            This struct offers accuracy and high performance for scenarios where time precision to the millisecond is sufficient - driven Trackmania times for example.
+            Operators for comparing and arithmetic operations are included.
+            </summary>
+            <param name="TotalMilliseconds">The total number of milliseconds.</param>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.#ctor(System.Int32)">
+            <summary>
+            Represents a time interval as a 32-bit integer, with <paramref name="TotalMilliseconds"/> as the unit.
+            This struct offers accuracy and high performance for scenarios where time precision to the millisecond is sufficient - driven Trackmania times for example.
+            Operators for comparing and arithmetic operations are included.
+            </summary>
+            <param name="TotalMilliseconds">The total number of milliseconds.</param>
+        </member>
+        <member name="P:TmEssentials.TimeInt32.TotalMilliseconds">
+            <summary>The total number of milliseconds.</summary>
+        </member>
+        <member name="F:TmEssentials.TimeInt32.Zero">
+            <summary>
+            Represents a zero time interval.
+            </summary>
+        </member>
+        <member name="F:TmEssentials.TimeInt32.MaxValue">
+            <summary>
+            Represents the maximum time interval that can be represented by this struct.
+            </summary>
+        </member>
+        <member name="F:TmEssentials.TimeInt32.MinValue">
+            <summary>
+            Represents the minimum time interval that can be represented by this struct.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Days">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Hours">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Milliseconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Minutes">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Seconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.Ticks">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.TotalDays">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.TotalHours">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.TotalMinutes">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.TotalSeconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeInt32.IsNegative">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.#ctor(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Constructs a <see cref="T:TmEssentials.TimeInt32"/> instance from hours, minutes, and seconds.
+            </summary>
+            <param name="hours">The number of hours.</param>
+            <param name="minutes">The number of minutes.</param>
+            <param name="seconds">The number of seconds.</param>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Constructs a <see cref="T:TmEssentials.TimeInt32"/> instance from days, hours, minutes, seconds, and optional milliseconds.
+            </summary>
+            <param name="days">The number of days.</param>
+            <param name="hours">The number of hours.</param>
+            <param name="minutes">The number of minutes.</param>
+            <param name="seconds">The number of seconds.</param>
+            <param name="milliseconds">The number of milliseconds (optional).</param>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.ToString(System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format.
+            </summary>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.ToString">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format with milliseconds and without apostrophes.
+            </summary>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromDays(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of days.
+            </summary>
+            <param name="value">The number of days.</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of days.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromHours(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of hours.
+            </summary>
+            <param name="value">The number of hours.</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of hours.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromMilliseconds(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of milliseconds.
+            </summary>
+            <param name="value">The number of milliseconds.</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of milliseconds.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromMinutes(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of minutes.
+            </summary>
+            <param name="value">The number of minutes.</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of minutes.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromSeconds(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of seconds.
+            </summary>
+            <param name="value">The number of seconds.</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of seconds.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.FromTicks(System.Int64)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeInt32"/> instance representing a specified number of ticks.
+            </summary>
+            <param name="value">The number of ticks (1 tick = 100 nanoseconds).</param>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/> instance equivalent to the specified number of ticks.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Add(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Divide(System.Single)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Divide(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Duration">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Multiply(System.Single)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Negate">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.CompareTo(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.CompareTo(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.Equals(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeInt32.ToTimeSingle">
+            <summary>
+            Converts this <see cref="T:TmEssentials.TimeInt32"/> to its equal <see cref="T:TmEssentials.TimeSingle"/> value.
+            </summary>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/>.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_GreaterThan(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeInt32"/> instances to determine if the first is greater than the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_GreaterThanOrEqual(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeInt32"/> instances to determine if the first is greater than or equal to the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_LessThan(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeInt32"/> instances to determine if the first is less than the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_LessThanOrEqual(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeInt32"/> instances to determine if the first is less than or equal to the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Equality(TmEssentials.TimeInt32,TmEssentials.TimeSingle)">
+            <summary>
+            Determines if a <see cref="T:TmEssentials.TimeInt32"/> instance and a <see cref="T:TmEssentials.TimeSingle"/> instance represent the same time interval.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Inequality(TmEssentials.TimeInt32,TmEssentials.TimeSingle)">
+            <summary>
+            Determines if a <see cref="T:TmEssentials.TimeInt32"/> instance and a <see cref="T:TmEssentials.TimeSingle"/> instance do not represent the same time interval.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_UnaryPlus(TmEssentials.TimeInt32)">
+            <summary>
+            Returns the same <see cref="T:TmEssentials.TimeInt32"/> instance (identity operation).
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Addition(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Adds two <see cref="T:TmEssentials.TimeInt32"/> instances together.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Addition(TmEssentials.TimeInt32,System.TimeSpan)">
+            <summary>
+            Adds a <see cref="T:System.TimeSpan"/> to a <see cref="T:TmEssentials.TimeInt32"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_UnaryNegation(TmEssentials.TimeInt32)">
+            <summary>
+            Negates a <see cref="T:TmEssentials.TimeInt32"/> instance (reverses the sign of the interval).
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Subtraction(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Subtracts one <see cref="T:TmEssentials.TimeInt32"/> instance from another.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Subtraction(TmEssentials.TimeInt32,System.TimeSpan)">
+            <summary>
+            Subtracts a <see cref="T:System.TimeSpan"/> from a <see cref="T:TmEssentials.TimeInt32"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Multiply(System.Single,TmEssentials.TimeInt32)">
+            <summary>
+            Multiplies a <see cref="T:TmEssentials.TimeInt32"/> instance by a float factor, resulting in a <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Multiply(System.Int32,TmEssentials.TimeInt32)">
+            <summary>
+            Multiplies a <see cref="T:TmEssentials.TimeInt32"/> instance by an integer factor.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Multiply(TmEssentials.TimeInt32,System.Single)">
+            <summary>
+            Multiplies a <see cref="T:TmEssentials.TimeInt32"/> instance by a float factor, resulting in a <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Multiply(TmEssentials.TimeInt32,System.Int32)">
+            <summary>
+            Multiplies a <see cref="T:TmEssentials.TimeInt32"/> instance by an integer factor.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Division(TmEssentials.TimeInt32,System.Single)">
+            <summary>
+            Divides a <see cref="T:TmEssentials.TimeInt32"/> instance by a float divisor, resulting in a <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Division(TmEssentials.TimeInt32,TmEssentials.TimeInt32)">
+            <summary>
+            Divides one <see cref="T:TmEssentials.TimeInt32"/> instance by another, resulting in a float.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Implicit(TmEssentials.TimeInt32)~System.TimeSpan">
+            <summary>
+            Implicitly converts a <see cref="T:TmEssentials.TimeInt32"/> instance to a <see cref="T:System.TimeSpan"/>.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Implicit(System.TimeSpan)~TmEssentials.TimeInt32">
+            <summary>
+            Implicitly converts a <see cref="T:System.TimeSpan"/> to a <see cref="T:TmEssentials.TimeInt32"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32.op_Implicit(TmEssentials.TimeSingle)~TmEssentials.TimeInt32">
+            <summary>
+            Implicitly converts a <see cref="T:TmEssentials.TimeSingle"/> to a <see cref="T:TmEssentials.TimeInt32"/> instance.
+            </summary>
+        </member>
+        <member name="T:TmEssentials.TimeInt32Extensions">
+            <summary>
+            Provides extension methods for <see cref="T:TmEssentials.TimeInt32"/> to enhance its functionality.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeInt32Extensions.ToTmString(TmEssentials.TimeInt32,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format.
+            </summary>
+            <remarks>This method just calls <see cref="M:TmEssentials.TimeInt32.ToString(System.Boolean,System.Boolean)"/> and exists only for consistency.</remarks>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32Extensions.ToTmString(System.Nullable{TmEssentials.TimeInt32},System.String,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format. If the value is null, <paramref name="nullString"/> will be used.
+            </summary>
+            <param name="time">A TimeSpan.</param>
+            <param name="nullString">A string to use if <paramref name="time"/> is null.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeInt32Extensions.ToTmString(System.Nullable{TmEssentials.TimeInt32},System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeInt32"/> to a Trackmania familiar time format. If the value is null, -:--.--- will be used, or -'--''--- when <paramref name="useApostrophe"/> is true.
+            </summary>
+            <param name="time">A TimeSingle.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="T:TmEssentials.TimeSingle">
+            <summary>
+            Represents a time interval as a 32-bit floating-point number, with <paramref name="TotalSeconds"/> as the unit.
+            This struct offers accuracy and high performance for scenarios - time of keyframes in MediaTracker for example.
+            Operators for comparing and arithmetic operations are included.
+            </summary>
+            <param name="TotalSeconds">The total number of seconds.</param>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.#ctor(System.Single)">
+            <summary>
+            Represents a time interval as a 32-bit floating-point number, with <paramref name="TotalSeconds"/> as the unit.
+            This struct offers accuracy and high performance for scenarios - time of keyframes in MediaTracker for example.
+            Operators for comparing and arithmetic operations are included.
+            </summary>
+            <param name="TotalSeconds">The total number of seconds.</param>
+        </member>
+        <member name="P:TmEssentials.TimeSingle.TotalSeconds">
+            <summary>The total number of seconds.</summary>
+        </member>
+        <member name="F:TmEssentials.TimeSingle.Zero">
+            <summary>
+            Represents a zero time interval.
+            </summary>
+        </member>
+        <member name="F:TmEssentials.TimeSingle.MaxValue">
+            <summary>
+            Represents the maximum time interval that can be represented by this struct.
+            </summary>
+        </member>
+        <member name="F:TmEssentials.TimeSingle.MinValue">
+            <summary>
+            Represents the minimum time interval that can be represented by this struct.
+            </summary>
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Days">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Hours">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Milliseconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Minutes">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Seconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.Ticks">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.TotalDays">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.TotalHours">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.TotalMilliseconds">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.TotalMinutes">
+            <inheritdoc />
+        </member>
+        <member name="P:TmEssentials.TimeSingle.IsNegative">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.#ctor(System.Int32,System.Int32,System.Int32)">
+            <summary>
+            Constructs a <see cref="T:TmEssentials.TimeSingle"/> instance from hours, minutes, and seconds.
+            </summary>
+            <param name="hours">The number of hours.</param>
+            <param name="minutes">The number of minutes.</param>
+            <param name="seconds">The number of seconds.</param>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Single)">
+            <summary>
+            Constructs a <see cref="T:TmEssentials.TimeSingle"/> instance from days, hours, minutes, seconds, and optional milliseconds.
+            </summary>
+            <param name="days">The number of days.</param>
+            <param name="hours">The number of hours.</param>
+            <param name="minutes">The number of minutes.</param>
+            <param name="seconds">The number of seconds.</param>
+            <param name="milliseconds">The number of milliseconds (optional).</param>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromDays(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of days.
+            </summary>
+            <param name="value">The number of days.</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of days.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromHours(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of hours.
+            </summary>
+            <param name="value">The number of hours.</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of hours.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromMilliseconds(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of milliseconds.
+            </summary>
+            <param name="value">The number of milliseconds.</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of milliseconds.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromMinutes(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of minutes.
+            </summary>
+            <param name="value">The number of minutes.</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of minutes.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromSeconds(System.Single)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of seconds.
+            </summary>
+            <param name="value">The number of seconds.</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of seconds.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.FromTicks(System.Int64)">
+            <summary>
+            Creates a new <see cref="T:TmEssentials.TimeSingle"/> instance representing a specified number of ticks.
+            </summary>
+            <param name="value">The number of ticks (1 tick = 100 nanoseconds).</param>
+            <returns>A <see cref="T:TmEssentials.TimeSingle"/> instance equivalent to the specified number of ticks.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Add(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Divide(System.Single)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Divide(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Duration">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Multiply(System.Single)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Negate">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.CompareTo(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.CompareTo(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.Equals(TmEssentials.ITime)">
+            <inheritdoc />
+        </member>
+        <member name="M:TmEssentials.TimeSingle.ToTimeInt32">
+            <summary>
+            Converts this <see cref="T:TmEssentials.TimeSingle"/> to its equal <see cref="T:TmEssentials.TimeInt32"/> value.
+            </summary>
+            <returns>A <see cref="T:TmEssentials.TimeInt32"/>.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.ToString(System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeSingle"/> to a Trackmania familiar time format.
+            </summary>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.ToString">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeSingle"/> to a Trackmania familiar time format with milliseconds and without apostrophes.
+            </summary>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_GreaterThan(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeSingle"/> instances to determine if the first is greater than the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_GreaterThanOrEqual(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeSingle"/> instances to determine if the first is greater than or equal to the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_LessThan(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeSingle"/> instances to determine if the first is less than the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_LessThanOrEqual(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Compares two <see cref="T:TmEssentials.TimeSingle"/> instances to determine if the first is less than or equal to the second.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Equality(TmEssentials.TimeSingle,TmEssentials.TimeInt32)">
+            <summary>
+            Determines if two <see cref="T:TmEssentials.TimeSingle"/> instances have the same value.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Inequality(TmEssentials.TimeSingle,TmEssentials.TimeInt32)">
+            <summary>
+            Determines if two <see cref="T:TmEssentials.TimeSingle"/> instances do not have the same value.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_UnaryPlus(TmEssentials.TimeSingle)">
+            <summary>
+            Returns the same <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Addition(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Adds the TotalSeconds of two <see cref="T:TmEssentials.TimeSingle"/> instances.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Addition(TmEssentials.TimeSingle,System.TimeSpan)">
+            <summary>
+            Adds the TotalSeconds of a <see cref="T:TmEssentials.TimeSingle"/> instance and a <see cref="T:System.TimeSpan"/>.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_UnaryNegation(TmEssentials.TimeSingle)">
+            <summary>
+            Negates the TotalSeconds of a <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Subtraction(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Subtracts the TotalSeconds of one <see cref="T:TmEssentials.TimeSingle"/> instance from another.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Subtraction(TmEssentials.TimeSingle,System.TimeSpan)">
+            <summary>
+            Subtracts the TotalSeconds of a <see cref="T:System.TimeSpan"/> from a <see cref="T:TmEssentials.TimeSingle"/> instance.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Multiply(System.Single,TmEssentials.TimeSingle)">
+            <summary>
+            Multiplies the TotalSeconds of a <see cref="T:TmEssentials.TimeSingle"/> instance by a float factor.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Multiply(TmEssentials.TimeSingle,System.Single)">
+            <summary>
+            Multiplies the TotalSeconds of a <see cref="T:TmEssentials.TimeSingle"/> instance by a float factor.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Division(TmEssentials.TimeSingle,System.Single)">
+            <summary>
+            Divides the TotalSeconds of a <see cref="T:TmEssentials.TimeSingle"/> instance by a float divisor.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Division(TmEssentials.TimeSingle,TmEssentials.TimeSingle)">
+            <summary>
+            Divides the TotalSeconds of one <see cref="T:TmEssentials.TimeSingle"/> instance by another, returning a float result.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Implicit(TmEssentials.TimeSingle)~System.TimeSpan">
+            <summary>
+            Implicitly converts a <see cref="T:TmEssentials.TimeSingle"/> to a <see cref="T:System.TimeSpan"/> based on TotalSeconds.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Implicit(System.TimeSpan)~TmEssentials.TimeSingle">
+            <summary>
+            Implicitly converts a <see cref="T:System.TimeSpan"/> to a <see cref="T:TmEssentials.TimeSingle"/> based on TotalSeconds.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingle.op_Implicit(TmEssentials.TimeInt32)~TmEssentials.TimeSingle">
+            <summary>
+            Implicitly converts a <see cref="T:TmEssentials.TimeInt32"/> to a <see cref="T:TmEssentials.TimeSingle"/> based on TotalMilliseconds.
+            </summary>
+        </member>
+        <member name="T:TmEssentials.TimeSingleExtensions">
+            <summary>
+            Provides extension methods for <see cref="T:TmEssentials.TimeSingle"/> to enhance its functionality.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSingleExtensions.ToTmString(TmEssentials.TimeSingle,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeSingle"/> to a Trackmania familiar time format.
+            </summary>
+            <remarks>This method just calls <see cref="M:TmEssentials.TimeSingle.ToString(System.Boolean,System.Boolean)"/> and exists only for consistency.</remarks>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingleExtensions.ToTmString(System.Nullable{TmEssentials.TimeSingle},System.String,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeSingle"/> to a Trackmania familiar time format. If the value is null, <paramref name="nullString"/> will be used.
+            </summary>
+            <param name="time">A TimeSpan.</param>
+            <param name="nullString">A string to use if <paramref name="time"/> is null.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSingleExtensions.ToTmString(System.Nullable{TmEssentials.TimeSingle},System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:TmEssentials.TimeSingle"/> to a Trackmania familiar time format. If the value is null, -:--.--- will be used, or -'--''--- when <paramref name="useApostrophe"/> is true.
+            </summary>
+            <param name="time">A TimeSingle.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example)</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="T:TmEssentials.TimeSpanExtensions">
+            <summary>
+            Provides extension methods for <see cref="T:System.TimeSpan"/> to enhance its functionality.
+            </summary>
+        </member>
+        <member name="M:TmEssentials.TimeSpanExtensions.ToMilliseconds(System.TimeSpan)">
+            <summary>
+            Converts the <paramref name="timeSpan"/> to a truncated millisecond representation (floor rounding).
+            </summary>
+            <param name="timeSpan">A TimeSpan.</param>
+            <returns>Amount of milliseconds.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSpanExtensions.ToTmString(System.TimeSpan,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:System.TimeSpan"/> to a Trackmania familiar time format.
+            </summary>
+            <param name="timeSpan">A TimeSpan.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example).</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSpanExtensions.ToTmString(System.Nullable{System.TimeSpan},System.String,System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:System.TimeSpan"/> to a Trackmania familiar time format. If the value is null, <paramref name="nullString"/> will be used.
+            </summary>
+            <param name="timeSpan">A TimeSpan.</param>
+            <param name="nullString">A string to use if <paramref name="timeSpan"/> is null.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example).</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+        <member name="M:TmEssentials.TimeSpanExtensions.ToTmString(System.Nullable{System.TimeSpan},System.Boolean,System.Boolean)">
+            <summary>
+            Converts the value of the current <see cref="T:System.TimeSpan"/> to a Trackmania familiar time format. If the value is null, -:--.--- will be used, or -'--''--- when <paramref name="useApostrophe"/> is true.
+            </summary>
+            <param name="timeSpan">A TimeSpan.</param>
+            <param name="useHundredths">If to use the hundredths instead of milliseconds (for better looks on TMUF for example).</param>
+            <param name="useApostrophe">If to use ' instead of a colon and '' instead of a dot (to resolve cases where colon is not allowed for example).</param>
+            <returns>A string representation of Trackmania time format.</returns>
+        </member>
+    </members>
+</doc>

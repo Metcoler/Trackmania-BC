@@ -1,14 +1,64 @@
-﻿using System;
+using System;
+using System.IO;
 
 class Program {
-    static void Main(string[] args) {
-        //string file_name = args[0];
-        string map_name = "AI Training #4";
-        string file_name = "../../../../Maps/GameFiles/" + map_name + ".Map.Gbx";
-        string export_name = "../../../../Maps/ExportedBlocks/" + map_name + ".txt";
-        Map map = new Map(file_name);
-        map.print_blocks();
-        map.export_to_file(export_name);
+    private const string DefaultMapName = "AI Training #4";
 
+    static int Main(string[] args) {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
+        string mapsDir = Path.Combine(repoRoot, "Maps", "GameFiles");
+        string exportsDir = Path.Combine(repoRoot, "Maps", "ExportedBlocks");
+
+        string mapInput = args.Length > 0 ? args[0] : DefaultMapName;
+        string mapPath = ResolveMapPath(mapInput, mapsDir);
+        string exportPath = args.Length > 1
+            ? Path.GetFullPath(args[1])
+            : Path.Combine(exportsDir, GetExportFileName(mapPath));
+
+        try {
+            Map map = new Map(mapPath);
+            map.print_blocks();
+            map.export_to_file(exportPath);
+            Console.WriteLine("Exported blocks to: " + exportPath);
+            return 0;
+        }
+        catch (FileNotFoundException ex) {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+        catch (EndOfStreamException ex) {
+            Console.Error.WriteLine("GBX.NET could not fully parse this map.");
+            Console.Error.WriteLine("This usually means the .Map.Gbx file is newer than the installed GBX.NET version, or the file is truncated/corrupted.");
+            Console.Error.WriteLine("File: " + mapPath);
+            Console.Error.WriteLine("Details: " + ex.Message);
+            return 1;
+        }
+        catch (Exception ex) {
+            Console.Error.WriteLine("Failed to read map '" + mapPath + "'.");
+            Console.Error.WriteLine(ex.ToString());
+            return 1;
+        }
+    }
+
+    private static string ResolveMapPath(string mapInput, string mapsDir) {
+        if (File.Exists(mapInput)) {
+            return Path.GetFullPath(mapInput);
+        }
+
+        if (Path.HasExtension(mapInput)) {
+            return Path.GetFullPath(mapInput);
+        }
+
+        return Path.Combine(mapsDir, mapInput + ".Map.Gbx");
+    }
+
+    private static string GetExportFileName(string mapPath) {
+        string fileName = Path.GetFileNameWithoutExtension(mapPath);
+
+        if (fileName.EndsWith(".Map", StringComparison.OrdinalIgnoreCase)) {
+            fileName = Path.GetFileNameWithoutExtension(fileName);
+        }
+
+        return fileName + ".txt";
     }
 }

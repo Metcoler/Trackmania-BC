@@ -1,5 +1,6 @@
 import glob
 import os
+import time
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -31,6 +32,17 @@ def find_latest_population(patterns: Optional[List[str]] = None) -> str:
             "No population .npz found. Check logs/mini_pretrain_runs or logs/ga_runs."
         )
 
+    return max(files, key=os.path.getmtime)
+
+
+def find_latest_supervised_model(
+    pattern: str = "logs/supervised_runs/**/best_model.pt",
+) -> str:
+    files = glob.glob(pattern, recursive=True)
+    if not files:
+        raise FileNotFoundError(
+            "No supervised model found. Check logs/supervised_runs for best_model.pt."
+        )
     return max(files, key=os.path.getmtime)
 
 
@@ -154,6 +166,41 @@ def _build_replay_indices(
     return indices[start_zero:end_zero]
 
 
+def _wait_for_positive_game_time(
+    env: RacingGameEnviroment,
+    timeout_seconds: float = 5.0,
+):
+    observation = getattr(env, "previous_observation", None)
+    distances, instructions, info = getattr(env, "previous_observation_info", (None, None, {}))
+    if float(info.get("time", 0.0)) > 0.0 and observation is not None:
+        return observation, info
+
+    deadline = time.perf_counter() + float(timeout_seconds)
+    last_info = dict(info)
+    while time.perf_counter() < deadline:
+        distances, instructions, info = env.observation_info()
+        last_info = info
+        if float(info.get("time", 0.0)) > 0.0:
+            observation = env.build_observation(
+                distances=distances,
+                instructions=instructions,
+                info=info,
+            )
+            env.previous_observation_info = (distances, instructions, info)
+            env.previous_observation = observation
+            return observation, info
+    return observation, last_info
+
+
+def _apply_target_steer_deadzone(action: np.ndarray, steer_deadzone: float) -> np.ndarray:
+    if steer_deadzone <= 0.0:
+        return action
+    adjusted = np.asarray(action, dtype=np.float32).copy()
+    if adjusted.shape == (3,) and abs(float(adjusted[2])) < float(steer_deadzone):
+        adjusted[2] = 0.0
+    return adjusted
+
+
 def replay_population(
     map_name: str = "small_map",
     population_file: Optional[str] = None,
@@ -168,6 +215,7 @@ def replay_population(
     rank_start: int = 1,
     rank_end: Optional[int] = None,
     exact_indices: Optional[List[int]] = None,
+    target_steer_deadzone: float = 0.0,
 ) -> None:
     """
     Replay a whole population or selected subset in Trackmania.
@@ -203,9 +251,6 @@ def replay_population(
             act_dim = int(env.action_space.shape[0])
         except Exception:
             act_dim = 3
-
-        if max_steps is None:
-            max_steps = min(RacingGameEnviroment.STEPS, 4000)
 
         file_obs_dim = meta.get("obs_dim")
         file_hidden_dims = meta.get("hidden_dims")
@@ -290,12 +335,20 @@ def replay_population(
 
             for ep in range(episodes_per_individual):
                 obs, info = env.reset()
+                if str(action_mode).strip().lower() == "target":
+                    obs, info = _wait_for_positive_game_time(env)
                 total_reward = 0.0
 
-                for _ in range(max_steps):
+                step_count = 0
+                while True:
+                    if max_steps is not None and step_count >= max_steps:
+                        break
                     action = individual.act(obs)
+                    if str(action_mode).strip().lower() == "target":
+                        action = _apply_target_steer_deadzone(action, target_steer_deadzone)
                     obs, reward, done, truncated, info = env.step(action)
                     total_reward += float(reward)
+                    step_count += 1
 
                     race_term = getattr(env, "race_terminated", 0)
                     info_done = info.get("done", 0.0) == 1.0
@@ -328,6 +381,7 @@ def drive_model(
     max_touches: int = 1,
     never_quit: bool = True,
     action_mode: str = "target",
+    target_steer_deadzone: float = 0.0,
 ) -> None:
     policy, extra = EvolutionPolicy.load(model_file, map_location="cpu")
     print(f"Loaded model from: {model_file}")
@@ -343,19 +397,24 @@ def drive_model(
         max_touches=max_touches,
     )
     obs, info = env.reset()
+    if str(action_mode).strip().lower() == "target":
+        obs, info = _wait_for_positive_game_time(env)
     if obs.shape[0] != policy.obs_dim:
         raise ValueError(
             f"Model obs_dim={policy.obs_dim} does not match env obs_dim={obs.shape[0]}."
         )
-    if max_steps is None:
-        max_steps = min(RacingGameEnviroment.STEPS, 4000)
-
     try:
         total_reward = 0.0
-        for _ in range(max_steps):
+        step_count = 0
+        while True:
+            if max_steps is not None and step_count >= max_steps:
+                break
             action = policy.act(obs)
+            if str(action_mode).strip().lower() == "target":
+                action = _apply_target_steer_deadzone(action, target_steer_deadzone)
             obs, reward, done, truncated, info = env.step(action)
             total_reward += float(reward)
+            step_count += 1
             race_term = getattr(env, "race_terminated", 0)
             info_done = info.get("done", 0.0) == 1.0
             if done or truncated or info_done or (race_term != 0):
@@ -374,12 +433,9 @@ def drive_model(
 
 
 if __name__ == "__main__":
-    MAP_NAME = "small_map"
-    MODEL_FILE = None
-    POPULATION_FILE = (
-        r"Cars Evolution Training Project/logs/mini_pretrain_runs/20260224_190401"
-        r"/checkpoints/population_gen_0100.npz"
-    )
+    MAP_NAME = "AI Training #2"
+    MODEL_FILE = find_latest_supervised_model()
+    POPULATION_FILE = None
     # POPULATION_FILE = None  # Auto-pick latest supported population checkpoint.
     # Example TM checkpoint:
     # POPULATION_FILE = (
@@ -388,11 +444,12 @@ if __name__ == "__main__":
     # )
 
     EPISODES_PER_INDIVIDUAL = 1
-    MAX_STEPS = 2000  # None -> min(STEPS, 4000)
+    MAX_STEPS = None # None -> run until time/termination guards stop the episode
     ENV_MAX_TIME = 60.0
     MAX_TOUCHES = 3
     NEVER_QUIT = True
     ACTION_MODE = "target"
+    TARGET_STEER_DEADZONE = 0.05
     PAUSE_BETWEEN = False
 
     # Selection (choose one style):
@@ -410,6 +467,7 @@ if __name__ == "__main__":
             max_touches=MAX_TOUCHES,
             never_quit=NEVER_QUIT,
             action_mode=ACTION_MODE,
+            target_steer_deadzone=TARGET_STEER_DEADZONE,
         )
     else:
         replay_population(
@@ -426,4 +484,5 @@ if __name__ == "__main__":
             rank_start=RANK_START,
             rank_end=RANK_END,
             exact_indices=EXACT_INDICES,
+            target_steer_deadzone=TARGET_STEER_DEADZONE,
         )

@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>GBX.NET.LZO</id>
+    <version>1.0.4</version>
+    <authors>Petr Pivoňka (BigBang1112)</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="expression">GPL-3.0-or-later</license>
+    <licenseUrl>https://licenses.nuget.org/GPL-3.0-or-later</licenseUrl>
+    <projectUrl>https://github.com/BigBang1112/gbx-net</projectUrl>
+    <description>An LZO compression plugin for GBX.NET to allow reading of compressed Gbx bodies.</description>
+    <copyright>Copyright © Petr 'BigBang1112' Pivoňka</copyright>
+    <tags>gbx, trackmania, maniaplanet, gamebox, net, chunk, lzo</tags>
+    <repository type="git" url="https://github.com/BigBang1112/gbx-net" commit="19c68567b2200067726547060b1059cec847bc31" />
+    <dependencies>
+      <group targetFramework=".NETFramework4.6.2" />
+      <group targetFramework="net6.0" />
+      <group targetFramework="net7.0" />
+      <group targetFramework="net8.0" />
+      <group targetFramework=".NETStandard2.0" />
+      <group targetFramework=".NETStandard2.1" />
+    </dependencies>
+  </metadata>
+</package>

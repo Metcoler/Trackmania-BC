@@ -1,0 +1,139 @@
+{
+  "created_utc": "2026-03-18T09:23:58Z",
+  "data_root": "logs/supervised_data",
+  "all_attempt_files": [
+    "logs/supervised_data\\20260317_225207_map_AI Training #2_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data\\20260317_225719_map_AI Training #3_target_dataset\\attempts\\attempt_0008.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0007.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0015.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0016.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0003.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0005.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0006.npz"
+  ],
+  "train_attempt_files": [
+    "logs/supervised_data\\20260317_225207_map_AI Training #2_target_dataset\\attempts\\attempt_0002.npz",
+    "logs/supervised_data\\20260317_225719_map_AI Training #3_target_dataset\\attempts\\attempt_0008.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0015.npz",
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0007.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0003.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0006.npz"
+  ],
+  "val_attempt_files": [
+    "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0016.npz",
+    "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0005.npz"
+  ],
+  "train_stats": {
+    "attempt_files": 6,
+    "total_frames_before_filter": 26915,
+    "boring_frames_before_filter": 5794,
+    "frames_after_filter_before_cap": 21697,
+    "frames_after_cap_before_mirror": 12552,
+    "frames_final": 25104,
+    "apply_boring_filter": true,
+    "apply_frame_cap": true,
+    "augment_mirror": true,
+    "per_attempt": [
+      {
+        "path": "logs/supervised_data\\20260317_225207_map_AI Training #2_target_dataset\\attempts\\attempt_0002.npz",
+        "raw_frames": 14395,
+        "boring_frames": 2898,
+        "frames_after_filter": 11798,
+        "frames_after_cap": 4000,
+        "final_frames": 8000
+      },
+      {
+        "path": "logs/supervised_data\\20260317_225719_map_AI Training #3_target_dataset\\attempts\\attempt_0008.npz",
+        "raw_frames": 6547,
+        "boring_frames": 1330,
+        "frames_after_filter": 5347,
+        "frames_after_cap": 4000,
+        "final_frames": 8000
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0015.npz",
+        "raw_frames": 1264,
+        "boring_frames": 218,
+        "frames_after_filter": 1064,
+        "frames_after_cap": 1064,
+        "final_frames": 2128
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0007.npz",
+        "raw_frames": 1343,
+        "boring_frames": 254,
+        "frames_after_filter": 1113,
+        "frames_after_cap": 1113,
+        "final_frames": 2226
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0003.npz",
+        "raw_frames": 1765,
+        "boring_frames": 586,
+        "frames_after_filter": 1231,
+        "frames_after_cap": 1231,
+        "final_frames": 2462
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0006.npz",
+        "raw_frames": 1601,
+        "boring_frames": 508,
+        "frames_after_filter": 1144,
+        "frames_after_cap": 1144,
+        "final_frames": 2288
+      }
+    ]
+  },
+  "val_stats": {
+    "attempt_files": 2,
+    "total_frames_before_filter": 2987,
+    "boring_frames_before_filter": 834,
+    "frames_after_filter_before_cap": 2987,
+    "frames_after_cap_before_mirror": 2987,
+    "frames_final": 2987,
+    "apply_boring_filter": false,
+    "apply_frame_cap": false,
+    "augment_mirror": false,
+    "per_attempt": [
+      {
+        "path": "logs/supervised_data\\20260317_230118_map_AI Training #4_target_dataset\\attempts\\attempt_0016.npz",
+        "raw_frames": 1348,
+        "boring_frames": 288,
+        "frames_after_filter": 1348,
+        "frames_after_cap": 1348,
+        "final_frames": 1348
+      },
+      {
+        "path": "logs/supervised_data\\20260317_230533_map_small_map_target_dataset\\attempts\\attempt_0005.npz",
+        "raw_frames": 1639,
+        "boring_frames": 546,
+        "frames_after_filter": 1639,
+        "frames_after_cap": 1639,
+        "final_frames": 1639
+      }
+    ]
+  },
+  "obs_dim": 32,
+  "act_dim": 3,
+  "hidden_dims": [
+    32
+  ],
+  "hidden_activation": "relu",
+  "batch_size": 4096,
+  "batch_size_override": null,
+  "num_workers": 4,
+  "pin_memory": true,
+  "amp_enabled": true,
+  "epochs": 80,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "validation_fraction": 0.25,
+  "train_boring_keep_probability": 0.1,
+  "train_max_frames_after_filter": 4000,
+  "best_epoch": 80,
+  "best_val_loss": 0.012674902565777302,
+  "best_model_path": "logs/supervised_runs\\20260318_102318_target_supervised\\best_model.pt",
+  "curve_path": "logs/supervised_runs\\20260318_102318_target_supervised\\loss_curve.png",
+  "device": "cuda",
+  "random_seed": 51951
+}

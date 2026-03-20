@@ -116,7 +116,9 @@ class AttemptWriter:
 
 
 def controller_to_action(state: XboxControllerState) -> np.ndarray:
-    return np.array([state.gas, state.brake, state.steer], dtype=np.float32)
+    gas = 1.0 if float(state.gas) > 0.5 else 0.0
+    brake = 1.0 if float(state.brake) > 0.5 else 0.0
+    return np.array([gas, brake, state.steer], dtype=np.float32)
 
 
 def rising_edge(current: int, previous: int) -> bool:
@@ -125,6 +127,7 @@ def rising_edge(current: int, previous: int) -> bool:
 
 if __name__ == "__main__":
     map_name = "small_map"
+    #map_name = "AI Training #4"
     base_dir = "logs/supervised_data"
     encoder = ObservationEncoder(dt_ref=1.0 / 100.0, dt_ratio_clip=3.0)
     writer = AttemptWriter(base_dir=base_dir, map_name=map_name, encoder=encoder)
@@ -143,7 +146,6 @@ if __name__ == "__main__":
     attempt_index = 1
     state = "waiting_for_start"
     attempt_samples: List[AttemptSample] = []
-    previous_action = np.zeros(3, dtype=np.float32)
     last_buttons = {"a": 0, "b": 0}
     finish_info: Dict[str, float] = {}
 
@@ -166,7 +168,6 @@ if __name__ == "__main__":
                 if game_time > 0.0:
                     encoder.reset()
                     attempt_samples = []
-                    previous_action = np.zeros(3, dtype=np.float32)
                     state = "recording"
                     print(f"Attempt {attempt_index:04d} started.")
 
@@ -175,7 +176,6 @@ if __name__ == "__main__":
                     distances=distances,
                     instructions=instructions,
                     info=info,
-                    previous_action=previous_action,
                 )
                 attempt_samples.append(
                     AttemptSample(
@@ -186,7 +186,6 @@ if __name__ == "__main__":
                         distance=total_distance,
                     )
                 )
-                previous_action = action.copy()
 
                 if b_pressed:
                     print(f"Attempt {attempt_index:04d} discarded by B restart.")

@@ -295,10 +295,11 @@ class EvolutionTrainer:
         hidden_dim: HiddenDims = 16,
         act_dim: int = 3,
         pop_size: int = 16,
-        max_steps: int = 2000,
+        max_steps: Optional[int] = 2000,
         policy_action_scale: Optional[np.ndarray] = None,
         policy_action_mode: str = "delta",
         hidden_activation: str = "tanh",
+        target_steer_deadzone: float = 0.0,
         logger: Optional[TrainingLogger] = None,
     ) -> None:
         self.env = env
@@ -307,10 +308,11 @@ class EvolutionTrainer:
         self.hidden_dim = self.hidden_dims[0] if len(self.hidden_dims) == 1 else self.hidden_dims
         self.act_dim = act_dim
         self.pop_size = pop_size
-        self.max_steps = max_steps
+        self.max_steps = None if max_steps is None else int(max_steps)
         self.policy_action_scale = None if policy_action_scale is None else np.asarray(policy_action_scale, dtype=np.float32)
         self.policy_action_mode = str(policy_action_mode).strip().lower()
         self.hidden_activation = str(hidden_activation).strip().lower()
+        self.target_steer_deadzone = float(target_steer_deadzone)
         self.logger = logger
 
         self.population: List[Individual] = [
@@ -343,6 +345,31 @@ class EvolutionTrainer:
             return f"CRASHx{abs(int(term))}"
         return str(term)
 
+    def _wait_for_positive_game_time(
+        self,
+        observation: np.ndarray,
+        info: Dict,
+        timeout_seconds: float = 5.0,
+    ) -> Tuple[np.ndarray, Dict]:
+        if float(info.get("time", 0.0)) > 0.0:
+            return observation, info
+
+        deadline = datetime.now().timestamp() + float(timeout_seconds)
+        last_info = dict(info)
+        while datetime.now().timestamp() < deadline:
+            distances, instructions, info = self.env.observation_info()
+            last_info = info
+            if float(info.get("time", 0.0)) > 0.0:
+                observation = self.env.build_observation(
+                    distances=distances,
+                    instructions=instructions,
+                    info=info,
+                )
+                self.env.previous_observation_info = (distances, instructions, info)
+                self.env.previous_observation = observation
+                return observation, info
+        return observation, last_info
+
     def evaluate_individual(
         self,
         individual: Individual,
@@ -357,16 +384,23 @@ class EvolutionTrainer:
         obs, info = self.env.reset()
         while info["done"] != 0:
             obs, info = self.env.reset()
+        if self.policy_action_mode == "target":
+            obs, info = self._wait_for_positive_game_time(obs, info)
 
         last_info = info
 
-        for _ in range(self.max_steps):
+        step_count = 0
+        while True:
+            if self.max_steps is not None and step_count >= self.max_steps:
+                break
             policy_obs = self._mirror_observation(obs) if mirrored else obs
             action = individual.act(policy_obs)
             if mirrored:
                 action = self._mirror_action_delta(action)
+            action = self._apply_target_steer_deadzone(action)
             obs, reward, done, truncated, info = self.env.step(action)
             last_info = info
+            step_count += 1
 
             race_term = getattr(self.env, "race_terminated", 0)
             info_done = info.get("done", 0.0) == 1.0
@@ -411,6 +445,14 @@ class EvolutionTrainer:
     @staticmethod
     def _mirror_action_delta(action: np.ndarray) -> np.ndarray:
         return ObservationEncoder.mirror_action(action)
+
+    def _apply_target_steer_deadzone(self, action: np.ndarray) -> np.ndarray:
+        if self.policy_action_mode != "target" or self.target_steer_deadzone <= 0.0:
+            return action
+        adjusted = np.asarray(action, dtype=np.float32).copy()
+        if adjusted.shape == (3,) and abs(float(adjusted[2])) < self.target_steer_deadzone:
+            adjusted[2] = 0.0
+        return adjusted
 
     @staticmethod
     def _sample_mirror_flags(count: int, mirror_episode_prob: float) -> np.ndarray:
@@ -1016,42 +1058,55 @@ class EvolutionTrainer:
             raise FileNotFoundError(f"No checkpoints found in {base_dir}.")
         return max(files, key=os.path.getmtime)
 
+    @staticmethod
+    def find_latest_supervised_model(base_dir: str = "logs/supervised_runs") -> str:
+        pattern = os.path.join(base_dir, "**", "best_model.pt")
+        files = glob.glob(pattern, recursive=True)
+        if not files:
+            raise FileNotFoundError(f"No supervised models found in {base_dir}.")
+        return max(files, key=os.path.getmtime)
+
 
 if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
-    map_name = "small_map"
+    map_name = "AI Training #3"
     hidden_dim = 32
     act_dim = 3
     pop_size = 32
-    max_steps = RacingGameEnviroment.STEPS
-    env_max_time = 60
+    max_steps = None
+    env_max_time = 120
     env_dt_ref = 1.0 / 100.0
     env_dt_ratio_clip = 3.0
-    action_mode = "delta"
-    policy_action_scale = np.array([0.2, 0.2, 0.2], dtype=np.float32)
-    hidden_activation = "tanh"
+    action_mode = "target"
+    policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+    hidden_activation = "relu"
+    target_steer_deadzone = 0.1
     generations_to_run = 120
     checkpoint_every = 10
     mirror_episode_prob = 0.0
     max_touches = 1
     start_idle_max_time = 3.0
-    # Mutation annealing: start exploratory, finish more like fine-tuning.
-    mutation_prob = 0.2
+    # Supervised-seeded TM run: start exploratory enough to escape the seed basin,
+    # then anneal toward fine-tuning.
+    mutation_prob = 0.08
     mutation_prob_decay = 0.995
-    mutation_prob_min = 0.05
-    mutation_sigma = 1.0
-    mutation_sigma_decay = 0.98
-    mutation_sigma_min = 0.05
-    initial_population_source: Optional[str] = None
+    mutation_prob_min = 0.02
+    mutation_sigma = 0.06
+    mutation_sigma_decay = 0.995
+    mutation_sigma_min = 0.015
+    try:
+        initial_population_source: Optional[str] = EvolutionTrainer.find_latest_supervised_model()
+    except FileNotFoundError:
+        initial_population_source = None
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
     # initial_population_source = (
     #     r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
     #     r"\checkpoints\population_gen_0060.npz"
     # )
-    seed_model_exact_copies = 1
-    seed_model_mutation_probs = (0.02, 0.05, 0.08)
-    seed_model_mutation_sigmas = (0.01, 0.03, 0.05)
+    seed_model_exact_copies = 2
+    seed_model_mutation_probs = (0.015, 0.04, 0.08)
+    seed_model_mutation_sigmas = (0.008, 0.02, 0.04)
     # True = TM checkpoint already evaluated in TM -> continue from next generation.
     # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
     resume_assume_evaluated_generation = False
@@ -1135,6 +1190,7 @@ if __name__ == "__main__":
         policy_action_scale=policy_action_scale,
         policy_action_mode=action_mode,
         hidden_activation=hidden_activation,
+        target_steer_deadzone=target_steer_deadzone,
         logger=logger,
     )
 
@@ -1181,6 +1237,7 @@ if __name__ == "__main__":
                 action_mode=action_mode,
                 policy_action_scale=policy_action_scale.tolist(),
                 hidden_activation=hidden_activation,
+                target_steer_deadzone=target_steer_deadzone,
                 finetune_from_checkpoint=resume_checkpoint,
                 initial_population_source=initial_population_source,
                 initial_population_source_kind=initial_population_source_kind,

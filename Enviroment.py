@@ -10,10 +10,6 @@ from ObservationEncoder import ObservationEncoder
 
 
 class RacingGameEnviroment(gym.Env):
-    # Increased step budget for TM GA training; fast-fail guards (start idle / stall / touches)
-    # prevent wasting too much time on dead individuals.
-    STEPS = 2**14
-
     def __init__(
         self,
         map_name,
@@ -50,7 +46,7 @@ class RacingGameEnviroment(gym.Env):
         self.action_mode = action_mode
 
         # Observations:
-        # [lasers N] + [path instructions M] + [speed, side_speed, next_point_dir, dt_ratio] + [prev action 3]
+        # [lasers N] + [path instructions M] + [speed, side_speed, next_point_dir, dt_ratio]
         obs_dim = self.obs_encoder.obs_dim
         obs_low, obs_high = self.obs_encoder.get_observation_bounds(action_mode=self.action_mode)
         self.observation_space = gym.spaces.Box(
@@ -82,10 +78,7 @@ class RacingGameEnviroment(gym.Env):
         self.controller = vgamepad.VX360Gamepad()
         self.controller.reset()
 
-        self.max_episode_steps = RacingGameEnviroment.STEPS
         self.max_time = max_time
-        if never_quit:
-            self.max_episode_steps = float('inf')
         self.current_step = 0
         self.race_terminated = 0 
         self.never_quit = never_quit
@@ -138,8 +131,6 @@ class RacingGameEnviroment(gym.Env):
     def step(self, action):
         done = False
         truncated = False
-        if self.current_step >= self.max_episode_steps - 1:
-            done = True
         self.current_step += 1
 
 
@@ -312,7 +303,6 @@ class RacingGameEnviroment(gym.Env):
             distances=distances,
             instructions=instructions,
             info=info,
-            previous_action=self.previous_action,
         )
         self.current_dt_ratio = self.obs_encoder.current_dt_ratio
         return observation
@@ -342,6 +332,8 @@ class RacingGameEnviroment(gym.Env):
             if 0.0 <= float(action_input[0]) <= 1.0 and 0.0 <= float(action_input[1]) <= 1.0:
                 gas01 = float(action_input[0])
                 brake01 = float(action_input[1])
+            gas01 = 1.0 if gas01 > 0.5 else 0.0
+            brake01 = 1.0 if brake01 > 0.5 else 0.0
             action = np.array(
                 [
                     float(np.clip(gas01, 0.0, 1.0)),

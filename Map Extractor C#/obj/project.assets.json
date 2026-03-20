@@ -2,11 +2,12 @@
   "version": 3,
   "targets": {
     "net7.0": {
-      "GBX.NET/1.2.2": {
+      "GBX.NET/1.2.12": {
         "type": "package",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "7.0.0",
-          "TmEssentials": "2.3.2"
+          "System.IO.Hashing": "8.0.0",
+          "TmEssentials": "2.4.1"
         },
         "compile": {
           "lib/net7.0/GBX.NET.dll": {
@@ -19,7 +20,7 @@
           }
         }
       },
-      "GBX.NET.LZO/1.0.3": {
+      "GBX.NET.LZO/1.0.4": {
         "type": "package",
         "compile": {
           "lib/net7.0/GBX.NET.LZO.dll": {
@@ -28,22 +29,6 @@
         },
         "runtime": {
           "lib/net7.0/GBX.NET.LZO.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "GBX.NET.PAK/1.1.2": {
-        "type": "package",
-        "dependencies": {
-          "GBX.NET": "1.1.1"
-        },
-        "compile": {
-          "lib/net7.0/GBX.NET.PAK.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net7.0/GBX.NET.PAK.dll": {
             "related": ".xml"
           }
         }
@@ -64,15 +49,31 @@
           "buildTransitive/net6.0/Microsoft.Extensions.Logging.Abstractions.targets": {}
         }
       },
-      "TmEssentials/2.3.2": {
+      "System.IO.Hashing/8.0.0": {
         "type": "package",
         "compile": {
-          "lib/net6.0/TmEssentials.dll": {
+          "lib/net7.0/System.IO.Hashing.dll": {
             "related": ".xml"
           }
         },
         "runtime": {
-          "lib/net6.0/TmEssentials.dll": {
+          "lib/net7.0/System.IO.Hashing.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net6.0/_._": {}
+        }
+      },
+      "TmEssentials/2.4.1": {
+        "type": "package",
+        "compile": {
+          "lib/net7.0/TmEssentials.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net7.0/TmEssentials.dll": {
             "related": ".xml"
           }
         }
@@ -80,14 +81,14 @@
     }
   },
   "libraries": {
-    "GBX.NET/1.2.2": {
-      "sha512": "wg4uwKFF1mPl6lGWyeFyVn8GmERW1C8b20sQYz+ADmNRwFfl4bzvOZLoafiLxjhhmlIhJVVyA8liqPld7C+TlA==",
+    "GBX.NET/1.2.12": {
+      "sha512": "P0yV1ZJUrStbVzlHxPsau7ECUYOfi9Z4LfUkwVvcedqjLLV96F7iiifRaoLRY5n7AoMkDlaXXl056ewRVKlQ4w==",
       "type": "package",
-      "path": "gbx.net/1.2.2",
+      "path": "gbx.net/1.2.12",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "gbx.net.1.2.2.nupkg.sha512",
+        "gbx.net.1.2.12.nupkg.sha512",
         "gbx.net.nuspec",
         "lib/net462/GBX.NET.dll",
         "lib/net462/GBX.NET.xml",
@@ -95,20 +96,22 @@
         "lib/net6.0/GBX.NET.xml",
         "lib/net7.0/GBX.NET.dll",
         "lib/net7.0/GBX.NET.xml",
+        "lib/net8.0/GBX.NET.dll",
+        "lib/net8.0/GBX.NET.xml",
         "lib/netstandard2.0/GBX.NET.dll",
         "lib/netstandard2.0/GBX.NET.xml",
         "lib/netstandard2.1/GBX.NET.dll",
         "lib/netstandard2.1/GBX.NET.xml"
       ]
     },
-    "GBX.NET.LZO/1.0.3": {
-      "sha512": "4b/gfyCx4ItsYIj3ukgB+2GFgz+t7sZerh31jxLOiFM+dvznoZ1oerNg8y3Fo8uy+FLTlT5HaTgeZB8hIF3Vcg==",
+    "GBX.NET.LZO/1.0.4": {
+      "sha512": "52C5Fc2Exm3RK+vfui4exnYlvIa+oV3WFm3blefcwqAHx3NEQ5aUUO5C3HatbrXQ51trRPtriavMkg/zxBGKNA==",
       "type": "package",
-      "path": "gbx.net.lzo/1.0.3",
+      "path": "gbx.net.lzo/1.0.4",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "gbx.net.lzo.1.0.3.nupkg.sha512",
+        "gbx.net.lzo.1.0.4.nupkg.sha512",
         "gbx.net.lzo.nuspec",
         "lib/net462/GBX.NET.LZO.dll",
         "lib/net462/GBX.NET.LZO.xml",
@@ -116,31 +119,12 @@
         "lib/net6.0/GBX.NET.LZO.xml",
         "lib/net7.0/GBX.NET.LZO.dll",
         "lib/net7.0/GBX.NET.LZO.xml",
+        "lib/net8.0/GBX.NET.LZO.dll",
+        "lib/net8.0/GBX.NET.LZO.xml",
         "lib/netstandard2.0/GBX.NET.LZO.dll",
         "lib/netstandard2.0/GBX.NET.LZO.xml",
         "lib/netstandard2.1/GBX.NET.LZO.dll",
         "lib/netstandard2.1/GBX.NET.LZO.xml"
-      ]
-    },
-    "GBX.NET.PAK/1.1.2": {
-      "sha512": "KHwdyfTQICtslNi12ODnqRmw7nYuKcEKx8yge+w/NAQNld/kd5ZjFclNl8qGv2sHj707mu0s8KWtXXdsgi+WiQ==",
-      "type": "package",
-      "path": "gbx.net.pak/1.1.2",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "gbx.net.pak.1.1.2.nupkg.sha512",
-        "gbx.net.pak.nuspec",
-        "lib/net462/GBX.NET.PAK.dll",
-        "lib/net462/GBX.NET.PAK.xml",
-        "lib/net6.0/GBX.NET.PAK.dll",
-        "lib/net6.0/GBX.NET.PAK.xml",
-        "lib/net7.0/GBX.NET.PAK.dll",
-        "lib/net7.0/GBX.NET.PAK.xml",
-        "lib/netstandard2.0/GBX.NET.PAK.dll",
-        "lib/netstandard2.0/GBX.NET.PAK.xml",
-        "lib/netstandard2.1/GBX.NET.PAK.dll",
-        "lib/netstandard2.1/GBX.NET.PAK.xml"
       ]
     },
     "Microsoft.Extensions.Logging.Abstractions/7.0.0": {
@@ -213,10 +197,40 @@
         "useSharedDesignerContext.txt"
       ]
     },
-    "TmEssentials/2.3.2": {
-      "sha512": "YTlWJQdROADpnL5eTvMGu8gjKA95p93U90hznZgnzUCxqIppmRgYX6cmw11cGyhglSOmonXJRvd2YK8g75bdPg==",
+    "System.IO.Hashing/8.0.0": {
+      "sha512": "ne1843evDugl0md7Fjzy6QjJrzsjh46ZKbhf8GwBXb5f/gw97J4bxMs0NQKifDuThh/f0bZ0e62NPl1jzTuRqA==",
       "type": "package",
-      "path": "tmessentials/2.3.2",
+      "path": "system.io.hashing/8.0.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/System.IO.Hashing.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net6.0/_._",
+        "buildTransitive/netcoreapp2.0/System.IO.Hashing.targets",
+        "lib/net462/System.IO.Hashing.dll",
+        "lib/net462/System.IO.Hashing.xml",
+        "lib/net6.0/System.IO.Hashing.dll",
+        "lib/net6.0/System.IO.Hashing.xml",
+        "lib/net7.0/System.IO.Hashing.dll",
+        "lib/net7.0/System.IO.Hashing.xml",
+        "lib/net8.0/System.IO.Hashing.dll",
+        "lib/net8.0/System.IO.Hashing.xml",
+        "lib/netstandard2.0/System.IO.Hashing.dll",
+        "lib/netstandard2.0/System.IO.Hashing.xml",
+        "system.io.hashing.8.0.0.nupkg.sha512",
+        "system.io.hashing.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "TmEssentials/2.4.1": {
+      "sha512": "K/RWlvnwJfLEH5gs1XA7d9wTvfXLexUBOA8W3N00ucrEqSQMwJbPhrPZJhzI2w5DRGJuAiEr7uXzZTCHEvtGWw==",
+      "type": "package",
+      "path": "tmessentials/2.4.1",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -224,20 +238,23 @@
         "lib/net462/TmEssentials.xml",
         "lib/net6.0/TmEssentials.dll",
         "lib/net6.0/TmEssentials.xml",
+        "lib/net7.0/TmEssentials.dll",
+        "lib/net7.0/TmEssentials.xml",
+        "lib/net8.0/TmEssentials.dll",
+        "lib/net8.0/TmEssentials.xml",
         "lib/netstandard2.0/TmEssentials.dll",
         "lib/netstandard2.0/TmEssentials.xml",
         "lib/netstandard2.1/TmEssentials.dll",
         "lib/netstandard2.1/TmEssentials.xml",
-        "tmessentials.2.3.2.nupkg.sha512",
+        "tmessentials.2.4.1.nupkg.sha512",
         "tmessentials.nuspec"
       ]
     }
   },
   "projectFileDependencyGroups": {
     "net7.0": [
-      "GBX.NET >= 1.2.2",
-      "GBX.NET.LZO >= 1.0.3",
-      "GBX.NET.PAK >= 1.1.2"
+      "GBX.NET >= 1.2.12",
+      "GBX.NET.LZO >= 1.0.4"
     ]
   },
   "packageFolders": {
@@ -292,15 +309,11 @@
         "dependencies": {
           "GBX.NET": {
             "target": "Package",
-            "version": "[1.2.2, )"
+            "version": "[1.2.12, )"
           },
           "GBX.NET.LZO": {
             "target": "Package",
-            "version": "[1.0.3, )"
-          },
-          "GBX.NET.PAK": {
-            "target": "Package",
-            "version": "[1.1.2, )"
+            "version": "[1.0.4, )"
           }
         },
         "imports": [

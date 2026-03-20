@@ -1,0 +1,13 @@
+{
+  "created_utc": "2026-03-17T21:57:19Z",
+  "map_name": "AI Training #3",
+  "observation_dim": 32,
+  "dt_ref": 0.01,
+  "dt_ratio_clip": 3.0,
+  "action_mode": "target",
+  "action_layout": [
+    "gas",
+    "brake",
+    "steer"
+  ]
+}

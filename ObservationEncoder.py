@@ -28,33 +28,23 @@ class ObservationEncoder:
 
     @property
     def obs_dim(self) -> int:
-        return Car.NUM_LASERS + Car.SIGHT_TILES + 7
+        return Car.NUM_LASERS + Car.SIGHT_TILES + 4
 
     def reset(self) -> None:
         self.previous_game_time = None
         self.current_dt_ratio = 1.0
 
     def get_observation_bounds(self, action_mode: str = "delta"):
-        mode = str(action_mode).strip().lower()
-        if mode == "target":
-            prev_low = [0.0, 0.0, -1.0]
-            prev_high = [1.0, 1.0, 1.0]
-        else:
-            prev_low = [-1.0, -1.0, -1.0]
-            prev_high = [1.0, 1.0, 1.0]
-
         obs_low = np.array(
             [0.0] * Car.NUM_LASERS
             + [-1.0] * Car.SIGHT_TILES
-            + [-1.0, -1.0, -1.0, 0.0]
-            + prev_low,
+            + [-1.0, -1.0, -1.0, 0.0],
             dtype=np.float32,
         )
         obs_high = np.array(
             [1.0] * Car.NUM_LASERS
             + [1.0] * Car.SIGHT_TILES
-            + [1.0, 1.0, 1.0, self.dt_ratio_clip]
-            + prev_high,
+            + [1.0, 1.0, 1.0, self.dt_ratio_clip],
             dtype=np.float32,
         )
         return obs_low, obs_high
@@ -84,7 +74,7 @@ class ObservationEncoder:
         self.current_dt_ratio = dt_ratio
         return dt_ratio
 
-    def build_observation(self, distances, instructions, info, previous_action) -> np.ndarray:
+    def build_observation(self, distances, instructions, info) -> np.ndarray:
         distances_vec = self.fit_vector(
             values=distances,
             expected_size=Car.NUM_LASERS,
@@ -95,12 +85,6 @@ class ObservationEncoder:
             expected_size=Car.SIGHT_TILES,
             pad_value=0.0,
         )
-        previous_action_vec = self.fit_vector(
-            values=previous_action,
-            expected_size=3,
-            pad_value=0.0,
-        )
-
         distances_norm = np.clip(distances_vec / self.laser_max_distance, 0.0, 1.0)
         instructions_norm = np.clip(
             instructions_vec / self.path_instruction_abs_max, -1.0, 1.0
@@ -125,7 +109,6 @@ class ObservationEncoder:
                     [speed_norm, side_speed_norm, next_point_direction, dt_ratio],
                     dtype=np.float32,
                 ),
-                previous_action_vec.astype(np.float32, copy=False),
             ]
         ).astype(np.float32, copy=False)
 
@@ -135,7 +118,7 @@ class ObservationEncoder:
         if x.ndim != 1:
             return x
 
-        min_expected = Car.NUM_LASERS + Car.SIGHT_TILES + 7
+        min_expected = Car.NUM_LASERS + Car.SIGHT_TILES + 4
         if x.shape[0] < min_expected:
             return x
 
@@ -146,9 +129,7 @@ class ObservationEncoder:
 
         aux_offset = Car.NUM_LASERS + Car.SIGHT_TILES
         side_speed_idx = aux_offset + 1
-        prev_action_steer_idx = aux_offset + 6
         x[side_speed_idx] = -x[side_speed_idx]
-        x[prev_action_steer_idx] = -x[prev_action_steer_idx]
         return x
 
     @staticmethod
