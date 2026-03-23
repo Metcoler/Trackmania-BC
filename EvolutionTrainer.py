@@ -1073,32 +1073,28 @@ if __name__ == "__main__":
     map_name = "AI Training #3"
     hidden_dim = 32
     act_dim = 3
-    pop_size = 32
+    pop_size = 64
     max_steps = None
-    env_max_time = 120
+    env_max_time = 60
     env_dt_ref = 1.0 / 100.0
     env_dt_ratio_clip = 3.0
     action_mode = "target"
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
     hidden_activation = "relu"
-    target_steer_deadzone = 0.1
-    generations_to_run = 120
+    target_steer_deadzone = 0.05
+    generations_to_run = 100
     checkpoint_every = 10
     mirror_episode_prob = 0.0
     max_touches = 1
     start_idle_max_time = 3.0
-    # Supervised-seeded TM run: start exploratory enough to escape the seed basin,
-    # then anneal toward fine-tuning.
-    mutation_prob = 0.08
+    # Baseline run from scratch: stronger exploration first, then gradual annealing.
+    mutation_prob = 0.12
     mutation_prob_decay = 0.995
-    mutation_prob_min = 0.02
-    mutation_sigma = 0.06
-    mutation_sigma_decay = 0.995
-    mutation_sigma_min = 0.015
-    try:
-        initial_population_source: Optional[str] = EvolutionTrainer.find_latest_supervised_model()
-    except FileNotFoundError:
-        initial_population_source = None
+    mutation_prob_min = 0.03
+    mutation_sigma = 0.18
+    mutation_sigma_decay = 0.99
+    mutation_sigma_min = 0.04
+    initial_population_source: Optional[str] = None
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
     # initial_population_source = (
     #     r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
