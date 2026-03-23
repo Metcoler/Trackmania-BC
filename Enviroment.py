@@ -163,7 +163,7 @@ class RacingGameEnviroment(gym.Env):
             timed_out = True
             truncated = True
 
-        reward = self.compute_reward(info, distances, safe_action)
+        reward = 0.0
         info["touch_count"] = int(self.touch_count)
         info["max_touches"] = int(self.max_touches)
         
@@ -409,65 +409,6 @@ class RacingGameEnviroment(gym.Env):
 
 
         
-    """
-    def compute_reward(self, info, distances, action):
-    
-        normalized_speed = info['speed'] / 1000
-        normalized_time = info['time'] / 40
-        normalized_distance = info['total_progress'] / len(self.map.block_path)
-        distance_per_time = 0
-        if normalized_time > 0:
-            distance_per_time = normalized_distance / normalized_time
-        reward = info['map_progress'] + distance_per_time + normalized_speed
-        reward += action[0] * 0.1
-        print(self.current_step, ":", reward, end='\r')
-
-        # punishments
-        reward -= action[1] * 0.1
-        for distance in distances:
-            if distance < 3:
-                reward -= 1
-                break
-        if info['speed'] < 3:
-            reward -= 1
-        return reward
-    """
-    
-    def compute_reward(self, info, distances, action):
-        # 1) progres po trati - hlavný signál
-        progress = info["map_progress"]          # -1, 0, 1
-
-        # 2) rýchlosť a zarovnanie k ďalšiemu bodu
-        speed = info["speed"]                    # 0..1000
-        align = info.get("next_point_direction", 0.0)  # -1..1, takto to máš v Car.get_data
-
-        reward = 0.0
-
-        # hlavný reward za posun po tiles
-        reward += 2.0 * progress                 # výrazne zvýrazní rozdiel medzi -1,0,1
-
-        # bonus za rýchlosť (max ~2, ak speed ~1000)
-        reward += 0.002 * speed
-
-        # bonus za smerovanie k ďalšiemu bodu
-        reward += 0.5 * align
-
-        # jemné preferovanie plynu a trest za brzdu
-        reward += 0.05 * action[0]
-        reward -= 0.05 * action[1]
-
-        # trest za blízkosť steny
-        if min(distances) < 3.0:
-            reward -= 2.0
-
-        # trest za státie
-        if speed < 3:
-            reward -= 1.0
-
-        return reward
-
-
-
 if __name__ == "__main__":
     map_name = "small_map"
     env = RacingGameEnviroment(map_name)
