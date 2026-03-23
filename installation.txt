@@ -1,0 +1,38 @@
+Trackmania-AI Python setup (Windows)
+
+Odporúčané:
+1. vytvor si virtual environment
+2. upgradni pip
+3. nainštaluj Python balíčky nižšie
+
+Príkazy:
+
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+
+Základné balíčky pre projekt:
+python -m pip install numpy trimesh gymnasium vgamepad matplotlib inputs "pyglet<2"
+
+PyTorch:
+
+Ak chceš CUDA verziu, použi oficiálny PyTorch index-url pre svoju GPU/CUDA kombináciu.
+Príklad pre CUDA 12.8:
+python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+
+Ak chceš CPU-only verziu:
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+Poznámky:
+
+- `vgamepad` na Windows potrebuje nainštalovaný ViGEmBus driver.
+- pre vizualizáciu cez `Vizualizer.py` je potrebný `pyglet`
+- projekt ďalej potrebuje:
+  - Trackmania
+  - OpenPlanet plugin, ktorý posiela live data do Pythonu
+  - exportované map/block súbory v priečinkoch projektu
+
+Oficiálne odkazy:
+- PyTorch install selector: https://pytorch.org/get-started/locally/
+- vgamepad: https://pypi.org/project/vgamepad/
+- ViGEmBus driver: https://github.com/ViGEm/ViGEmBus/releases/
