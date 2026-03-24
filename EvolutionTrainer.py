@@ -1070,7 +1070,7 @@ class EvolutionTrainer:
 if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
-    map_name = "AI Training #3"
+    map_name = "small_map"
     hidden_dim = 32
     act_dim = 3
     pop_size = 64
