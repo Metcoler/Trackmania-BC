@@ -1088,10 +1088,10 @@ if __name__ == "__main__":
     max_touches = 1
     start_idle_max_time = 3.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
-    mutation_prob = 0.12
-    mutation_prob_decay = 0.995
+    mutation_prob = 0.20
+    mutation_prob_decay = 0.997
     mutation_prob_min = 0.03
-    mutation_sigma = 0.18
+    mutation_sigma = 0.5
     mutation_sigma_decay = 0.99
     mutation_sigma_min = 0.04
     initial_population_source: Optional[str] = None
