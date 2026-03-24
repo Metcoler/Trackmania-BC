@@ -1,8 +1,28 @@
-GameData/
+﻿GameData/
 Mesh Extractor/blocksExport/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Local IDE / editor state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET / C# local build artifacts
 Map Extractor C#/bin/
 Map Extractor C#/obj/
+
+# Local training outputs
 logs/PPO*
-Bakalárska práca/
+
+# Local-only folders
+Bakal*/
 Cars Evolution Training Project/
