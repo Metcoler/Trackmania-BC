@@ -73,7 +73,7 @@ class Individual:
             time_bucket = 10**9
 
         if term <= 0:
-            dist = 0
+            return (term, progress, -t, 0)
         
         return (term, progress, -time_bucket, -dist)
 

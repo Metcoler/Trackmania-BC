@@ -269,12 +269,28 @@ Responsibilities:
 - provide mutation and crossover
 - provide scalar fitness only as a log-friendly numeric proxy
 
-Current ranking order:
+Current ranking logic:
 
-- `term`
-- `progress`
-- `time_bucket`
-- `distance`
+- `term < 0`
+  - crash-like failure
+  - lower values are worse, e.g. `-3` is worse than `-1`
+- `term = 0`
+  - timeout / truncation
+- `term = 1`
+  - reached finish
+
+Current ranking policy in `Individual.ranking_key()`:
+
+- for unfinished runs (`term <= 0`):
+  - rank by `term`, then `progress`, then exact `time`
+  - `distance` is ignored
+- for finished runs (`term > 0`):
+  - rank by `term`, then `progress`, then `time_bucket`, then `distance`
+
+Reason for this design:
+
+- unfinished agents were finding a local minimum where they drove into the first wall with a short traveled distance
+- to avoid rewarding that behavior, `distance` is only minimized among finished runs
 
 ### `EvolutionTrainer.py`
 
