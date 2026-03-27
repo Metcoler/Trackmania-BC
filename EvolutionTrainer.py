@@ -13,6 +13,7 @@ from ObservationEncoder import ObservationEncoder
 
 
 HiddenDims = Union[int, Sequence[int]]
+HiddenActivations = Union[str, Sequence[str]]
 
 
 def normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
@@ -28,6 +29,43 @@ def normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
 def hidden_dims_tag(hidden_dims: HiddenDims) -> str:
     dims = normalize_hidden_dims(hidden_dims)
     return "x".join(str(dim) for dim in dims)
+
+
+def normalize_hidden_activations(
+    hidden_activation: HiddenActivations,
+    num_hidden_layers: int,
+) -> Tuple[str, ...]:
+    if num_hidden_layers <= 0:
+        raise ValueError("num_hidden_layers must be positive.")
+
+    if isinstance(hidden_activation, str):
+        activations = [hidden_activation]
+    else:
+        activations = list(hidden_activation)
+
+    if not activations:
+        raise ValueError("hidden_activation must contain at least one activation name.")
+
+    normalized: List[str] = []
+    for activation in activations:
+        value = str(activation).strip().lower()
+        if value == "tann":
+            value = "tanh"
+        if value not in {"tanh", "relu", "sigmoid"}:
+            raise ValueError(
+                f"Unsupported hidden activation '{activation}'. "
+                "Use 'tanh', 'relu', or 'sigmoid'."
+            )
+        normalized.append(value)
+
+    if len(normalized) == 1 and num_hidden_layers > 1:
+        normalized = normalized * num_hidden_layers
+    if len(normalized) != num_hidden_layers:
+        raise ValueError(
+            "hidden_activation must provide either one activation or exactly "
+            f"{num_hidden_layers} activations, got {len(normalized)}."
+        )
+    return tuple(normalized)
 
 
 class TrainingLogger:
@@ -176,11 +214,14 @@ class TrainingLogger:
         if len(hidden_dims) == 1:
             payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
         if population:
+            hidden_activations = tuple(population[0].policy.hidden_activations)
             payload.update(
                 action_scale=population[0].policy.action_scale.detach().cpu().numpy().astype(np.float32),
                 action_mode=np.array([population[0].policy.action_mode]),
-                hidden_activation=np.array([population[0].policy.hidden_activation]),
+                hidden_activations=np.array(hidden_activations, dtype=str),
             )
+            if len(hidden_activations) == 1:
+                payload["hidden_activation"] = np.array([hidden_activations[0]], dtype=str)
 
         if best_individual is not None:
             payload.update(
@@ -236,11 +277,14 @@ class TrainingLogger:
         if len(hidden_dims) == 1:
             payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
         if population:
+            hidden_activations = tuple(population[0].policy.hidden_activations)
             payload.update(
                 action_scale=population[0].policy.action_scale.detach().cpu().numpy().astype(np.float32),
                 action_mode=np.array([population[0].policy.action_mode]),
-                hidden_activation=np.array([population[0].policy.hidden_activation]),
+                hidden_activations=np.array(hidden_activations, dtype=str),
             )
+            if len(hidden_activations) == 1:
+                payload["hidden_activation"] = np.array([hidden_activations[0]], dtype=str)
         if best_individual is not None:
             payload.update(best_genome=best_individual.genome.astype(np.float32))
         np.savez(final_path, **payload)
@@ -298,7 +342,7 @@ class EvolutionTrainer:
         max_steps: Optional[int] = 2000,
         policy_action_scale: Optional[np.ndarray] = None,
         policy_action_mode: str = "delta",
-        hidden_activation: str = "tanh",
+        hidden_activation: HiddenActivations = "tanh",
         target_steer_deadzone: float = 0.0,
         logger: Optional[TrainingLogger] = None,
     ) -> None:
@@ -311,7 +355,15 @@ class EvolutionTrainer:
         self.max_steps = None if max_steps is None else int(max_steps)
         self.policy_action_scale = None if policy_action_scale is None else np.asarray(policy_action_scale, dtype=np.float32)
         self.policy_action_mode = str(policy_action_mode).strip().lower()
-        self.hidden_activation = str(hidden_activation).strip().lower()
+        self.hidden_activations = normalize_hidden_activations(
+            hidden_activation=hidden_activation,
+            num_hidden_layers=len(self.hidden_dims),
+        )
+        self.hidden_activation = (
+            self.hidden_activations[0]
+            if len(self.hidden_activations) == 1
+            else list(self.hidden_activations)
+        )
         self.target_steer_deadzone = float(target_steer_deadzone)
         self.logger = logger
 
@@ -322,7 +374,7 @@ class EvolutionTrainer:
                 act_dim,
                 action_scale=self.policy_action_scale,
                 action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
+                hidden_activation=self.hidden_activations,
             )
             for _ in range(pop_size)
         ]
@@ -542,10 +594,10 @@ class EvolutionTrainer:
                 f"Model action_mode='{loaded_policy.action_mode}' does not match "
                 f"trainer action_mode='{self.policy_action_mode}'."
             )
-        if loaded_policy.hidden_activation != self.hidden_activation:
+        if loaded_policy.hidden_activations != self.hidden_activations:
             raise ValueError(
-                f"Model hidden_activation='{loaded_policy.hidden_activation}' does not match "
-                f"trainer hidden_activation='{self.hidden_activation}'."
+                f"Model hidden_activations={list(loaded_policy.hidden_activations)} do not match "
+                f"trainer hidden_activations={list(self.hidden_activations)}."
             )
 
         loaded_scale = loaded_policy.action_scale.detach().cpu().numpy().astype(np.float32)
@@ -564,7 +616,7 @@ class EvolutionTrainer:
             genome=loaded_policy.genome.copy(),
             action_scale=self.policy_action_scale.copy(),
             action_mode=self.policy_action_mode,
-            hidden_activation=self.hidden_activation,
+            hidden_activation=self.hidden_activations,
         )
 
         exact_copies = int(max(0, exact_copies))
@@ -623,6 +675,7 @@ class EvolutionTrainer:
             tiers=tier_summaries,
             model_extra=extra,
             hidden_dims=list(self.hidden_dims),
+            hidden_activations=list(self.hidden_activations),
             action_mode=self.policy_action_mode,
         )
 
@@ -719,6 +772,7 @@ class EvolutionTrainer:
                 max_steps=self.max_steps,
                 policy_action_mode=self.policy_action_mode,
                 hidden_activation=self.hidden_activation,
+                hidden_activations=list(self.hidden_activations),
                 run_started_utc=TrainingLogger._timestamp_utc(),
                 start_generation=self.generation,
                 generations_requested=generations,
@@ -982,6 +1036,34 @@ class EvolutionTrainer:
                 f"trainer hidden_dims={self.hidden_dims}."
             )
 
+        checkpoint_hidden_activations: Optional[Tuple[str, ...]] = None
+        if "hidden_activations" in data.files:
+            checkpoint_hidden_activations = normalize_hidden_activations(
+                [str(value) for value in np.asarray(data["hidden_activations"]).reshape(-1)],
+                len(self.hidden_dims),
+            )
+        elif "hidden_activation" in data.files:
+            raw_hidden_activations = np.asarray(data["hidden_activation"]).reshape(-1)
+            if raw_hidden_activations.size > 0:
+                if raw_hidden_activations.size == 1:
+                    checkpoint_hidden_activations = normalize_hidden_activations(
+                        str(raw_hidden_activations[0]),
+                        len(self.hidden_dims),
+                    )
+                else:
+                    checkpoint_hidden_activations = normalize_hidden_activations(
+                        [str(value) for value in raw_hidden_activations],
+                        len(self.hidden_dims),
+                    )
+        if (
+            checkpoint_hidden_activations is not None
+            and checkpoint_hidden_activations != self.hidden_activations
+        ):
+            raise ValueError(
+                f"Checkpoint hidden_activations={list(checkpoint_hidden_activations)} do not match "
+                f"trainer hidden_activations={list(self.hidden_activations)}."
+            )
+
         progresses = data["progresses"] if "progresses" in data.files else None
         times = data["times"] if "times" in data.files else None
         terms = data["terms"] if "terms" in data.files else None
@@ -997,7 +1079,7 @@ class EvolutionTrainer:
                 genome=genomes[i],
                 action_scale=self.policy_action_scale,
                 action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
+                hidden_activation=self.hidden_activations,
             )
             if progresses is not None:
                 ind.total_progress = float(progresses[i])
@@ -1031,7 +1113,7 @@ class EvolutionTrainer:
                 genome=np.asarray(data["best_genome"], dtype=np.float32),
                 action_scale=self.policy_action_scale,
                 action_mode=self.policy_action_mode,
-                hidden_activation=self.hidden_activation,
+                hidden_activation=self.hidden_activations,
             )
             if "best_progress" in data.files:
                 best.total_progress = float(np.asarray(data["best_progress"]).reshape(-1)[0])
@@ -1070,25 +1152,25 @@ class EvolutionTrainer:
 if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
-    map_name = "small_map"
-    hidden_dim = 32
+    map_name = "AI Training #3"
+    hidden_dim = [32]
     act_dim = 3
     pop_size = 64
     max_steps = None
-    env_max_time = 60
+    env_max_time = 100
     env_dt_ref = 1.0 / 100.0
     env_dt_ratio_clip = 3.0
-    action_mode = "target"
+    action_mode = "target"  # target / delta
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-    hidden_activation = "relu"
-    target_steer_deadzone = 0.05
-    generations_to_run = 100
+    hidden_activation = ["relu"]
+    target_steer_deadzone = 0.00
+    generations_to_run = 300
     checkpoint_every = 10
     mirror_episode_prob = 0.0
-    max_touches = 1
+    max_touches = 3
     start_idle_max_time = 3.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
-    mutation_prob = 0.20
+    mutation_prob = 0.3
     mutation_prob_decay = 0.997
     mutation_prob_min = 0.03
     mutation_sigma = 0.5
@@ -1096,13 +1178,10 @@ if __name__ == "__main__":
     mutation_sigma_min = 0.04
     initial_population_source: Optional[str] = None
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
-    # initial_population_source = (
-    #     r"Cars Evolution Training Project\logs\mini_pretrain_runs\20260224_232445"
-    #     r"\checkpoints\population_gen_0060.npz"
-    # )
     seed_model_exact_copies = 2
     seed_model_mutation_probs = (0.015, 0.04, 0.08)
     seed_model_mutation_sigmas = (0.008, 0.02, 0.04)
+    
     # True = TM checkpoint already evaluated in TM -> continue from next generation.
     # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
     resume_assume_evaluated_generation = False
@@ -1125,10 +1204,10 @@ if __name__ == "__main__":
 
     if seed_model_path:
         seed_policy, _ = EvolutionPolicy.load(seed_model_path, map_location="cpu")
-        hidden_dim = seed_policy.hidden_dims
+        hidden_dim = list(seed_policy.hidden_dims)
         act_dim = seed_policy.act_dim
         action_mode = seed_policy.action_mode
-        hidden_activation = seed_policy.hidden_activation
+        hidden_activation = list(seed_policy.hidden_activations)
         policy_action_scale = (
             seed_policy.action_scale.detach().cpu().numpy().astype(np.float32)
         )
@@ -1232,7 +1311,8 @@ if __name__ == "__main__":
                 env_dt_ratio_clip=env_dt_ratio_clip,
                 action_mode=action_mode,
                 policy_action_scale=policy_action_scale.tolist(),
-                hidden_activation=hidden_activation,
+                hidden_activation=trainer.hidden_activation,
+                hidden_activations=list(trainer.hidden_activations),
                 target_steer_deadzone=target_steer_deadzone,
                 finetune_from_checkpoint=resume_checkpoint,
                 initial_population_source=initial_population_source,
@@ -1262,3 +1342,4 @@ if __name__ == "__main__":
 
     finally:
         env.close()
+    input("Training finished...")

@@ -6,6 +6,55 @@ import torch.nn as nn
 
 
 HiddenDims = Union[int, Sequence[int]]
+HiddenActivations = Union[str, Sequence[str]]
+
+
+def normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
+    if isinstance(hidden_dim, (tuple, list)):
+        dims = tuple(int(dim) for dim in hidden_dim)
+    else:
+        dims = (int(hidden_dim),)
+    if not dims or any(dim <= 0 for dim in dims):
+        raise ValueError("hidden_dim must contain positive integers.")
+    return dims
+
+
+def canonicalize_activation_name(name: str) -> str:
+    activation = str(name).strip().lower()
+    if activation == "tann":
+        activation = "tanh"
+    if activation not in {"tanh", "relu", "sigmoid"}:
+        raise ValueError(
+            f"Unsupported hidden activation '{name}'. "
+            "Use 'tanh', 'relu', or 'sigmoid'."
+        )
+    return activation
+
+
+def normalize_hidden_activations(
+    hidden_activation: HiddenActivations,
+    num_hidden_layers: int,
+) -> Tuple[str, ...]:
+    if num_hidden_layers <= 0:
+        raise ValueError("num_hidden_layers must be positive.")
+
+    if isinstance(hidden_activation, str):
+        activations = [hidden_activation]
+    else:
+        activations = list(hidden_activation)
+
+    if not activations:
+        raise ValueError("hidden_activation must contain at least one activation name.")
+
+    normalized = tuple(canonicalize_activation_name(value) for value in activations)
+    if len(normalized) == 1 and num_hidden_layers > 1:
+        normalized = normalized * num_hidden_layers
+    if len(normalized) != num_hidden_layers:
+        raise ValueError(
+            "hidden_activation must provide either one activation or exactly "
+            f"{num_hidden_layers} activations, got {len(normalized)}."
+        )
+    return normalized
 
 
 class EvolutionPolicy(nn.Module):
@@ -17,18 +66,26 @@ class EvolutionPolicy(nn.Module):
         genome: Optional[np.ndarray] = None,
         action_scale: Optional[np.ndarray] = None,
         action_mode: str = "delta",
-        hidden_activation: str = "tanh",
+        hidden_activation: HiddenActivations = "tanh",
         device: Optional[Union[str, torch.device]] = None,
     ) -> None:
         super().__init__()
         self.obs_dim = int(obs_dim)
-        self.hidden_dims = self._normalize_hidden_dims(hidden_dim)
-        self.hidden_dim = self.hidden_dims[0] if len(self.hidden_dims) == 1 else None
+        self.hidden_dims = normalize_hidden_dims(hidden_dim)
+        self.hidden_dim = self.hidden_dims[0] if len(self.hidden_dims) == 1 else self.hidden_dims
         self.act_dim = int(act_dim)
         self.action_mode = str(action_mode).strip().lower()
         if self.action_mode not in {"delta", "target"}:
             raise ValueError("action_mode must be 'delta' or 'target'.")
-        self.hidden_activation = str(hidden_activation).strip().lower()
+        self.hidden_activations = normalize_hidden_activations(
+            hidden_activation=hidden_activation,
+            num_hidden_layers=len(self.hidden_dims),
+        )
+        self.hidden_activation = (
+            self.hidden_activations[0]
+            if len(self.hidden_activations) == 1
+            else list(self.hidden_activations)
+        )
         if device is None:
             device = torch.device("cpu")
         self.device = torch.device(device)
@@ -41,16 +98,6 @@ class EvolutionPolicy(nn.Module):
 
         if genome is not None:
             self.set_genome(genome)
-
-    @staticmethod
-    def _normalize_hidden_dims(hidden_dim: HiddenDims) -> Tuple[int, ...]:
-        if isinstance(hidden_dim, (tuple, list)):
-            dims = tuple(int(dim) for dim in hidden_dim)
-        else:
-            dims = (int(hidden_dim),)
-        if not dims or any(dim <= 0 for dim in dims):
-            raise ValueError("hidden_dim must contain positive integers.")
-        return dims
 
     def _normalize_action_scale(self, action_scale: Optional[np.ndarray]) -> np.ndarray:
         if action_scale is None:
@@ -65,24 +112,24 @@ class EvolutionPolicy(nn.Module):
             )
         return scale.astype(np.float32, copy=False)
 
-    def _make_activation(self) -> nn.Module:
-        if self.hidden_activation == "relu":
+    def _make_activation(self, activation_name: str) -> nn.Module:
+        if activation_name == "relu":
             return nn.ReLU()
-        if self.hidden_activation == "sigmoid":
+        if activation_name == "sigmoid":
             return nn.Sigmoid()
-        if self.hidden_activation == "tanh":
+        if activation_name == "tanh":
             return nn.Tanh()
         raise ValueError(
-            f"Unsupported hidden activation '{self.hidden_activation}'. "
+            f"Unsupported hidden activation '{activation_name}'. "
             "Use 'tanh', 'relu', or 'sigmoid'."
         )
 
     def _build_model(self) -> nn.Sequential:
         layers = []
         in_dim = self.obs_dim
-        for hidden in self.hidden_dims:
+        for hidden, activation_name in zip(self.hidden_dims, self.hidden_activations):
             layers.append(nn.Linear(in_dim, hidden))
-            layers.append(self._make_activation())
+            layers.append(self._make_activation(activation_name))
             in_dim = hidden
         layers.append(nn.Linear(in_dim, self.act_dim))
         return nn.Sequential(*layers)
@@ -98,18 +145,25 @@ class EvolutionPolicy(nn.Module):
         return sum(parameter.numel() for parameter in self.model.parameters())
 
     @staticmethod
-    def compute_genome_size(obs_dim: int, hidden_dim: int, act_dim: int) -> int:
-        w1_size = hidden_dim * (obs_dim + 1)
-        w2_size = act_dim * (hidden_dim + 1)
-        return w1_size + w2_size
+    def compute_genome_size(obs_dim: int, hidden_dim: HiddenDims, act_dim: int) -> int:
+        hidden_dims = normalize_hidden_dims(hidden_dim)
+        in_dim = int(obs_dim)
+        total_size = 0
+        for hidden in hidden_dims:
+            total_size += int(hidden) * (in_dim + 1)
+            in_dim = int(hidden)
+        total_size += int(act_dim) * (in_dim + 1)
+        return total_size
 
     def get_config(self) -> Dict[str, Any]:
         return {
             "obs_dim": self.obs_dim,
             "hidden_dim": list(self.hidden_dims),
+            "hidden_dims": list(self.hidden_dims),
             "act_dim": self.act_dim,
             "action_mode": self.action_mode,
-            "hidden_activation": self.hidden_activation,
+            "hidden_activation": list(self.hidden_activations),
+            "hidden_activations": list(self.hidden_activations),
             "action_scale": self.action_scale.detach().cpu().numpy().astype(np.float32).tolist(),
         }
 
@@ -192,16 +246,20 @@ class EvolutionPolicy(nn.Module):
             map_location = torch.device("cpu")
         payload = torch.load(path, map_location=map_location)
         config = dict(payload.get("config", {}))
-        hidden_dim = config.get("hidden_dim")
+        hidden_dim = config.get("hidden_dims", config.get("hidden_dim"))
         if isinstance(hidden_dim, list):
             hidden_dim = tuple(hidden_dim)
+        hidden_activation = config.get(
+            "hidden_activations",
+            config.get("hidden_activation", "tanh"),
+        )
         policy = cls(
             obs_dim=int(config["obs_dim"]),
             hidden_dim=hidden_dim,
             act_dim=int(config["act_dim"]),
             action_scale=np.asarray(config.get("action_scale", [0.2, 0.2, 0.2]), dtype=np.float32),
             action_mode=str(config.get("action_mode", "delta")),
-            hidden_activation=str(config.get("hidden_activation", "tanh")),
+            hidden_activation=hidden_activation,
             device=map_location,
         )
         policy.load_state_dict(payload["state_dict"])

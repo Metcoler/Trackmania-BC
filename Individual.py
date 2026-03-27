@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional, Tuple
 
-from EvolutionPolicy import EvolutionPolicy
+from EvolutionPolicy import EvolutionPolicy, HiddenActivations, HiddenDims
 
 
 class Individual:
@@ -14,12 +14,12 @@ class Individual:
     def __init__(
         self,
         obs_dim: int,
-        hidden_dim: int,
+        hidden_dim: HiddenDims,
         act_dim: int,
         genome: Optional[np.ndarray] = None,
         action_scale: Optional[np.ndarray] = None,
         action_mode: str = "delta",
-        hidden_activation: str = "tanh",
+        hidden_activation: HiddenActivations = "tanh",
     ) -> None:
         self.policy = EvolutionPolicy(
             obs_dim=obs_dim,
@@ -72,6 +72,12 @@ class Individual:
         else:
             time_bucket = 10**9
 
+
+        # If player didn't reach 50% don't consider time
+        if progress < 50:
+            return (term, progress, 0, 0)
+        
+        # If agent didn't finish, don't consider min distance
         if term <= 0:
             return (term, progress, -t, 0)
         

@@ -1,0 +1,50 @@
+{
+  "obs_dim": 29,
+  "hidden_dim": 32,
+  "act_dim": 3,
+  "pop_size": 64,
+  "max_steps": null,
+  "policy_action_mode": "target",
+  "hidden_activation": "relu",
+  "run_started_utc": "2026-03-24T22:58:26Z",
+  "start_generation": 0,
+  "generations_requested": 300,
+  "elite_fraction": 0.25,
+  "mutation_prob": 0.3,
+  "mutation_sigma": 0.5,
+  "mutation_prob_decay": 0.997,
+  "mutation_prob_min": 0.03,
+  "mutation_sigma_decay": 0.99,
+  "mutation_sigma_min": 0.04,
+  "mirror_episode_prob": 0.0,
+  "checkpoint_every": 10,
+  "dnf_time_for_plot": 60.0,
+  "map_name": "AI Training #3",
+  "env_max_time": 100,
+  "env_dt_ref": 0.01,
+  "env_dt_ratio_clip": 3.0,
+  "action_mode": "target",
+  "policy_action_scale": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "target_steer_deadzone": 0.0,
+  "finetune_from_checkpoint": null,
+  "initial_population_source": null,
+  "initial_population_source_kind": "random",
+  "seed_model_path": null,
+  "seed_model_exact_copies": 2,
+  "seed_model_mutation_probs": [
+    0.015,
+    0.04,
+    0.08
+  ],
+  "seed_model_mutation_sigmas": [
+    0.008,
+    0.02,
+    0.04
+  ],
+  "max_touches": 1,
+  "start_idle_max_time": 3.0
+}

@@ -1,7 +1,7 @@
 import glob
 import os
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -94,9 +94,18 @@ def _read_optional_int_tuple(data, key: str) -> Optional[Tuple[int, ...]]:
     return tuple(int(value) for value in arr)
 
 
+def _read_optional_str_tuple(data, key: str) -> Optional[Tuple[str, ...]]:
+    if key not in data.files:
+        return None
+    arr = np.asarray(data[key]).reshape(-1)
+    if arr.size == 0:
+        return None
+    return tuple(str(value) for value in arr)
+
+
 def load_population(
     filename: str,
-) -> Tuple[np.ndarray, Dict[str, Optional[np.ndarray]], Dict[str, Optional[int]]]:
+) -> Tuple[np.ndarray, Dict[str, Optional[np.ndarray]], Dict[str, Any]]:
     """
     Load genomes + optional metrics/meta from population checkpoint.
 
@@ -120,7 +129,7 @@ def load_population(
             "terms": _read_optional_array(data, "terms"),
             "distances": _read_optional_array(data, "distances"),
         }
-        meta: Dict[str, Optional[int]] = {
+        meta: Dict[str, Any] = {
             "generation": _read_optional_scalar_int(data, "generation"),
             "obs_dim": _read_optional_scalar_int(data, "obs_dim"),
             "hidden_dim": _read_optional_scalar_int(data, "hidden_dim"),
@@ -129,6 +138,11 @@ def load_population(
         hidden_dims = _read_optional_int_tuple(data, "hidden_dims")
         if hidden_dims is not None:
             meta["hidden_dims"] = hidden_dims
+        hidden_activations = _read_optional_str_tuple(data, "hidden_activations")
+        if hidden_activations is None:
+            hidden_activations = _read_optional_str_tuple(data, "hidden_activation")
+        if hidden_activations is not None:
+            meta["hidden_activations"] = hidden_activations
 
     return genomes, metrics, meta
 
@@ -255,6 +269,7 @@ def replay_population(
         file_obs_dim = meta.get("obs_dim")
         file_hidden_dims = meta.get("hidden_dims")
         file_hidden_dim = meta.get("hidden_dim")
+        file_hidden_activations = meta.get("hidden_activations")
         file_act_dim = meta.get("act_dim")
 
         if file_obs_dim is not None and file_obs_dim != obs_dim:
@@ -273,8 +288,18 @@ def replay_population(
         else:
             hidden_dim = infer_hidden_dim(genome_size, obs_dim, act_dim)
 
+        hidden_activation: Any = "tanh"
+        if file_hidden_activations is not None:
+            file_hidden_activations = tuple(str(value) for value in file_hidden_activations)
+            hidden_activation = (
+                file_hidden_activations[0]
+                if len(file_hidden_activations) == 1
+                else list(file_hidden_activations)
+            )
+
         print(
-            f"Architecture: obs_dim={obs_dim}, hidden_dim={hidden_dim}, act_dim={act_dim}"
+            f"Architecture: obs_dim={obs_dim}, hidden_dim={hidden_dim}, "
+            f"hidden_activation={hidden_activation}, act_dim={act_dim}"
         )
 
         indices = _build_replay_indices(
@@ -331,6 +356,7 @@ def replay_population(
                 genome=genome,
                 action_scale=np.ones(act_dim, dtype=np.float32) if str(action_mode).strip().lower() == "target" else None,
                 action_mode=action_mode,
+                hidden_activation=hidden_activation,
             )
 
             for ep in range(episodes_per_individual):

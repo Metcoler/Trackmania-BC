@@ -249,6 +249,7 @@ Torch policy network.
 Responsibilities:
 
 - define the MLP policy
+- support one or more hidden layers with per-layer activations
 - support `delta` and `target` action modes
 - expose flattened genome view for GA
 - save/load `.pt` policy files

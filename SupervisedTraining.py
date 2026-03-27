@@ -252,8 +252,8 @@ if __name__ == "__main__":
     output_root = "logs/supervised_runs"
 
     # Simple baseline: all frames in one shuffled pool, no validation split.
-    hidden_dims = (16,)
-    hidden_activation = "relu"
+    hidden_dims = [16]
+    hidden_activations = ["relu"]
     batch_size_override = None
     epochs = 150
     learning_rate = 1e-3
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         hidden_dim=hidden_dims,
         act_dim=act_dim,
         action_mode="target",
-        hidden_activation=hidden_activation,
+        hidden_activation=hidden_activations,
         action_scale=np.ones(act_dim, dtype=np.float32),
         device=device,
     )
@@ -399,7 +399,8 @@ if __name__ == "__main__":
         "obs_dim": obs_dim,
         "act_dim": act_dim,
         "hidden_dims": list(hidden_dims),
-        "hidden_activation": hidden_activation,
+        "hidden_activation": hidden_activations[0] if len(hidden_activations) == 1 else list(hidden_activations),
+        "hidden_activations": list(hidden_activations),
         "batch_size": batch_size,
         "batch_size_override": batch_size_override,
         "num_workers": num_workers,
