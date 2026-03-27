@@ -14,7 +14,7 @@ class Car:
     NUM_LASERS = 15
     ANGLE = 180
     SIGHT_TILES = 10
-    PACKET_FLOAT_COUNT = 16
+    PACKET_FLOAT_COUNT = 20
     PACKET_SIZE = PACKET_FLOAT_COUNT * 4
 
     def __init__(self, game_map: Map) -> None:
@@ -26,6 +26,7 @@ class Car:
         self.speed = 0
         self.side_speed = 0
         self.distance_traveled = 0
+        self.wheel_slips = np.zeros(4, dtype=np.float32)
 
         self.last_position = self.position
         self.last_direction = self.direction
@@ -151,6 +152,15 @@ class Car:
         self.speed = data['speed']
         self.side_speed = data['side_speed']
         self.distance_traveled = data['distance']
+        self.wheel_slips = np.array(
+            [
+                data["slip_fl"],
+                data["slip_fr"],
+                data["slip_rl"],
+                data["slip_rr"],
+            ],
+            dtype=np.float32,
+        )
     
 
         delta_tile = self.update_path_state()
@@ -218,7 +228,7 @@ class Car:
         if len(packet) != Car.PACKET_SIZE:
             raise ValueError(f"Invalid packet size: {len(packet)} != {Car.PACKET_SIZE}")
 
-        values = struct.unpack("<16f", packet)
+        values = struct.unpack("<20f", packet)
         keys = [
             "speed",
             "side_speed",
@@ -236,6 +246,10 @@ class Car:
             "dy",
             "dz",
             "time",
+            "slip_fl",
+            "slip_fr",
+            "slip_rl",
+            "slip_rr",
         ]
         data = dict(zip(keys, values))
         data["y"] += 0.2
@@ -295,6 +309,7 @@ class Car:
         self.speed = 0
         self.side_speed = 0
         self.distance_traveled = 0
+        self.wheel_slips = np.zeros(4, dtype=np.float32)
 
         self.last_position = self.position
         self.last_direction = self.direction

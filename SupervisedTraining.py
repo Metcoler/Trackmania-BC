@@ -53,14 +53,42 @@ def find_attempt_files(base_dir: str = "logs/supervised_data") -> List[str]:
 
 
 def load_attempt(path: str) -> Dict[str, np.ndarray]:
-    expected_obs_dim = ObservationEncoder().obs_dim
+    encoder = ObservationEncoder()
+    expected_obs_dim = encoder.obs_dim
+    base_obs_dim = encoder.base_obs_dim()
+    slip_obs_dim = encoder.slip_obs_dim()
     with np.load(path) as data:
         observations = np.asarray(data["observations"], dtype=np.float32)
         if observations.ndim != 2:
             raise ValueError(f"Expected 2D observations in {path}, got shape {observations.shape}.")
-        if observations.shape[1] < expected_obs_dim:
+        if observations.shape[1] == expected_obs_dim:
+            pass
+        elif observations.shape[1] >= slip_obs_dim and observations.shape[1] < expected_obs_dim:
+            # Current 33-dim datasets already contain slip features but not the newer
+            # temporal summary block. Preserve the canonical 33-dim prefix and pad
+            # the temporal features with zeros.
+            observations = observations[:, :slip_obs_dim]
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - slip_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+        elif observations.shape[1] >= base_obs_dim and observations.shape[1] < slip_obs_dim:
+            # Historical datasets used the canonical 29-dim prefix and, in some runs,
+            # appended previous-action leakage after that prefix. Keep only the safe
+            # canonical prefix, then pad all newer features with zeros.
+            observations = observations[:, :base_obs_dim]
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - base_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+        elif observations.shape[1] < base_obs_dim:
             raise ValueError(
-                f"Observation dim {observations.shape[1]} in {path} is smaller than expected {expected_obs_dim}."
+                f"Observation dim {observations.shape[1]} in {path} is smaller than "
+                f"the canonical base observation {base_obs_dim}."
             )
         if observations.shape[1] > expected_obs_dim:
             observations = observations[:, :expected_obs_dim]
@@ -397,6 +425,7 @@ if __name__ == "__main__":
         "all_attempt_files": attempt_files,
         "dataset_stats": dataset_stats,
         "obs_dim": obs_dim,
+        "observation_layout": ObservationEncoder.feature_names(),
         "act_dim": act_dim,
         "hidden_dims": list(hidden_dims),
         "hidden_activation": hidden_activations[0] if len(hidden_activations) == 1 else list(hidden_activations),

@@ -48,6 +48,7 @@ class AttemptWriter:
             "created_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "map_name": map_name,
             "observation_dim": encoder.obs_dim,
+            "observation_layout": encoder.feature_names(),
             "dt_ref": encoder.dt_ref,
             "dt_ratio_clip": encoder.dt_ratio_clip,
             "action_mode": "target",

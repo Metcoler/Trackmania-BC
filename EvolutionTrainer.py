@@ -325,6 +325,7 @@ class TrainingLogger:
             term=int(best.term),
             distance=float(best.distance),
             fitness=np.nan if best.fitness is None else float(best.fitness),
+            observation_layout=ObservationEncoder.feature_names(),
         )
         if generation is not None:
             extra["generation"] = int(generation)
@@ -766,6 +767,7 @@ class EvolutionTrainer:
         if self.logger is not None:
             cfg = dict(
                 obs_dim=self.obs_dim,
+                observation_layout=ObservationEncoder.feature_names(),
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 pop_size=self.pop_size,
@@ -1152,30 +1154,44 @@ class EvolutionTrainer:
 if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
+    # map dependend constants
     map_name = "AI Training #3"
-    hidden_dim = [32]
-    act_dim = 3
-    pop_size = 64
-    max_steps = None
-    env_max_time = 100
-    env_dt_ref = 1.0 / 100.0
-    env_dt_ratio_clip = 3.0
+    env_max_time = 1000
+    
+    # neural network architecture
+    hidden_dim = [32, 16]
+    hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-    hidden_activation = ["relu"]
-    target_steer_deadzone = 0.00
-    generations_to_run = 300
-    checkpoint_every = 10
-    mirror_episode_prob = 0.0
-    max_touches = 3
-    start_idle_max_time = 3.0
-    # Baseline run from scratch: stronger exploration first, then gradual annealing.
+    
+    # Evolution
+    pop_size = 64
+    generations_to_run = 1000
+    checkpoint_every = 50
+
     mutation_prob = 0.3
     mutation_prob_decay = 0.997
     mutation_prob_min = 0.03
     mutation_sigma = 0.5
     mutation_sigma_decay = 0.99
     mutation_sigma_min = 0.04
+
+
+    # Fancy updates
+    mirror_episode_prob = 0.0
+    target_steer_deadzone = 0.00
+    max_touches = 3
+    
+    
+    # Other constants
+    act_dim = 3
+    max_steps = None
+    env_dt_ref = 1.0 / 100.0
+    env_dt_ratio_clip = 3.0
+    policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+    start_idle_max_time = 3.0
+    # Baseline run from scratch: stronger exploration first, then gradual annealing.
+    
+    # Train from checkpoint or supervised predtrainded model
     initial_population_source: Optional[str] = None
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
     seed_model_exact_copies = 2

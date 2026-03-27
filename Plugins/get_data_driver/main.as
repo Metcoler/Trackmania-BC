@@ -250,6 +250,12 @@ void Main()
 			//buf.Write(api.time)
 			append_float(buf, time);
 
+			// Per-wheel slip coefficients (2D traction signal for the agent).
+			append_float(buf, state.FLSlipCoef);
+			append_float(buf, state.FRSlipCoef);
+			append_float(buf, state.RLSlipCoef);
+			append_float(buf, state.RRSlipCoef);
+
 
 
 

@@ -83,10 +83,31 @@ Current observation layout:
 - `side_speed`
 - `next_point_direction`
 - `dt_ratio`
+- `FL/FR/RL/RR slip coefficients`
+- `longitudinal_accel`
+- `lateral_accel`
+- `yaw_rate`
+- `5` overlapping laser clearance-rate sector averages
 
 Current observation dimension:
 
-- `15 + 10 + 4 = 29`
+- `15 + 10 + 16 = 41`
+
+Current phased observation roadmap:
+
+- current 2D upgrade
+  - add per-wheel slip coefficients
+  - add compact temporal summary:
+    - `longitudinal_accel`
+    - `lateral_accel`
+    - `yaw_rate`
+    - `5` overlapping clearance-rate sectors derived from the lidar fan
+- next 2D/surface-aware upgrade
+  - add ground contact material
+  - add gear
+  - add rpm
+- later 3D upgrade
+  - add vertical / airborne / orientation metrics needed for jumps and height changes
 
 Important history:
 
@@ -160,7 +181,7 @@ OpenPlanet plugin.
 Responsibilities:
 
 - opens TCP server on `127.0.0.1:9002`
-- streams 16 floats every Trackmania frame
+- streams 20 floats every Trackmania frame
 - includes:
   - speed
   - side speed
@@ -171,6 +192,7 @@ Responsibilities:
   - gear / rpm
   - direction vector
   - game time
+  - FL/FR/RL/RR slip coefficients
 
 This is the root of the live runtime data stream.
 
@@ -209,6 +231,8 @@ Canonical observation builder.
 Responsibilities:
 
 - standardize distances and motion values
+- standardize per-wheel slip coefficients
+- derive compact temporal motion features from previous vs current frame
 - compute `dt_ratio = dt / dt_ref`
 - expose observation bounds
 - provide mirror helpers for observations and actions

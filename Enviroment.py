@@ -46,7 +46,11 @@ class RacingGameEnviroment(gym.Env):
         self.action_mode = action_mode
 
         # Observations:
-        # [lasers N] + [path instructions M] + [speed, side_speed, next_point_dir, dt_ratio]
+        # [lasers N] + [path instructions M] +
+        # [speed, side_speed, next_point_dir, dt_ratio,
+        #  slip_fl, slip_fr, slip_rl, slip_rr,
+        #  longitudinal_accel, lateral_accel, yaw_rate,
+        #  clearance_rate_sector_0..4]
         obs_dim = self.obs_encoder.obs_dim
         obs_low, obs_high = self.obs_encoder.get_observation_bounds(action_mode=self.action_mode)
         self.observation_space = gym.spaces.Box(
