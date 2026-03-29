@@ -17,6 +17,25 @@ class Car:
     PACKET_FLOAT_COUNT = 20
     PACKET_SIZE = PACKET_FLOAT_COUNT * 4
 
+    @staticmethod
+    def _normalize_xz(vector) -> np.ndarray | None:
+        vec = np.array([vector[0], 0.0, vector[2]], dtype=np.float32)
+        norm = float(np.linalg.norm(vec))
+        if norm <= 1e-6:
+            return None
+        return vec / norm
+
+    @classmethod
+    def _signed_heading_error(cls, forward_vector, target_vector) -> float:
+        forward = cls._normalize_xz(forward_vector)
+        target = cls._normalize_xz(target_vector)
+        if forward is None or target is None:
+            return 0.0
+
+        dot = float(np.clip(np.dot(forward, target), -1.0, 1.0))
+        cross_y = float(forward[0] * target[2] - forward[2] * target[0])
+        return float(np.arctan2(cross_y, dot) / np.pi)
+
     def __init__(self, game_map: Map) -> None:
         self.position = np.array(game_map.get_start_position())
         self.direction = np.array(game_map.get_start_direction())
@@ -186,15 +205,16 @@ class Car:
             self.next_instructions += [self.next_instructions[-1] for _ in range(Car.SIGHT_TILES - len(self.next_instructions))]
 
         self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
-        next_point_direction = self.next_points[1] - self.next_points[0]
-        next_point_direction_norm = np.linalg.norm(next_point_direction)
-        if next_point_direction_norm > 1e-6:
-            next_point_direction = next_point_direction / next_point_direction_norm
-            dot_product = float(np.dot(next_point_direction, self.direction))
-        else:
-            dot_product = 1.0
-        
-        data['next_point_direction'] = dot_product
+        current_segment_vector = self.next_points[1] - self.next_points[0]
+        next_segment_vector = self.next_points[2] - self.next_points[1]
+        data["segment_heading_error"] = self._signed_heading_error(
+            self.direction,
+            current_segment_vector,
+        )
+        data["next_segment_heading_error"] = self._signed_heading_error(
+            self.direction,
+            next_segment_vector,
+        )
         self.generate_laser_directions(Car.ANGLE)
         self.find_closest_intersections()
         return self.distances, self.next_instructions, data

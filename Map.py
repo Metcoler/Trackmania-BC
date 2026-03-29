@@ -272,19 +272,9 @@ class Map:
         
         print("Path constructed...")
         self.block_path = path
-        path_tiles_tmp = []
-        for block_position in path:
-            path_tiles_tmp.append(self.blocks[block_position].in_tile)
-            path_tiles_tmp.append(self.blocks[block_position].out_tile)
-        
         self.path_tiles = []
-        for tile in path_tiles_tmp:
-            if self.path_tiles and all(self.path_tiles[-1] == tile):
-                continue
-            self.path_tiles.append(tile)
-        print("Path tiles constructed...")
-
         self.path_instructions = []
+        self.block_path_instructions = []
         for block_position in path:
             block = self.blocks[block_position]
             in_vector = block.in_vector
@@ -292,8 +282,18 @@ class Map:
 
             in_vector_2D = [in_vector[0], in_vector[2]]
             out_vector_2D = [out_vector[0], out_vector[2]]
+            block_instruction = float(np.cross(in_vector_2D, out_vector_2D) * block.block_size)
+            self.block_path_instructions.append(block_instruction)
 
-            self.path_instructions.append(np.cross(in_vector_2D, out_vector_2D) * block.block_size)
+            # Keep path instructions tile-aligned with path_tile_index.
+            # Some blocks contribute two unique path tiles (for example Curve2/Curve3),
+            # so a block-level instruction list drifts out of sync with tile progress.
+            for tile in (block.in_tile, block.out_tile):
+                if self.path_tiles and np.array_equal(self.path_tiles[-1], tile):
+                    continue
+                self.path_tiles.append(tile)
+                self.path_instructions.append(block_instruction)
+        print("Path tiles constructed...")
         print(self.path_instructions)
 
         print("Path length:", len(self.path_tiles))
@@ -374,19 +374,19 @@ class Map:
         for block in self.blocks.values():
             scene.add_geometry(block.get_road_mesh())
             scene.add_geometry(block.get_walls_mesh())
-            #block.generate_mesh_points()
-            #scene.add_geometry(block.get_points_mesh())
+            block.generate_mesh_points()
+            scene.add_geometry(block.get_points_mesh())
             #scene.add_geometry(block.in_point_mesh)
             #scene.add_geometry(block.out_point_mesh)        
             #scene.add_geometry(block.in_vector_mesh)
             #scene.add_geometry(block.out_vector_mesh)
-        scene.add_geometry(self.get_path_line_mesh())
-        scene.add_geometry(self.get_path_points_mesh())
+        #scene.add_geometry(self.get_path_line_mesh())
+        #scene.add_geometry(self.get_path_points_mesh())
            
         scene.show()
 
 
 
 if __name__ == "__main__":
-    test_map = Map("loop_test")
+    test_map = Map("small_map")
     test_map.plot_map()

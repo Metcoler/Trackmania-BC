@@ -7,7 +7,8 @@ class ObservationEncoder:
     BASE_FEATURE_NAMES = (
         "speed",
         "side_speed",
-        "next_point_direction",
+        "segment_heading_error",
+        "next_segment_heading_error",
         "dt_ratio",
     )
     WHEEL_SLIP_FEATURE_NAMES = (
@@ -133,7 +134,7 @@ class ObservationEncoder:
         obs_low = np.array(
             [0.0] * Car.NUM_LASERS
             + [-1.0] * Car.SIGHT_TILES
-            + [-1.0, -1.0, -1.0, 0.0]
+            + [-1.0, -1.0, -1.0, -1.0, 0.0]
             + [0.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
             dtype=np.float32,
         )
@@ -144,7 +145,7 @@ class ObservationEncoder:
         obs_high = np.array(
             [1.0] * Car.NUM_LASERS
             + [1.0] * Car.SIGHT_TILES
-            + [1.0, 1.0, 1.0, self.dt_ratio_clip]
+            + [1.0, 1.0, 1.0, 1.0, self.dt_ratio_clip]
             + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
             dtype=np.float32,
         )
@@ -206,8 +207,11 @@ class ObservationEncoder:
         side_speed_norm = float(
             np.clip(info.get("side_speed", 0.0) / self.side_speed_abs_max, -1.0, 1.0)
         )
-        next_point_direction = float(
-            np.clip(info.get("next_point_direction", 1.0), -1.0, 1.0)
+        segment_heading_error = float(
+            np.clip(info.get("segment_heading_error", 0.0), -1.0, 1.0)
+        )
+        next_segment_heading_error = float(
+            np.clip(info.get("next_segment_heading_error", 0.0), -1.0, 1.0)
         )
         current_time = float(info.get("time", 0.0))
         previous_game_time = self.previous_game_time
@@ -289,7 +293,13 @@ class ObservationEncoder:
                 distances_norm,
                 instructions_norm,
                 np.array(
-                    [speed_norm, side_speed_norm, next_point_direction, dt_ratio],
+                    [
+                        speed_norm,
+                        side_speed_norm,
+                        segment_heading_error,
+                        next_segment_heading_error,
+                        dt_ratio,
+                    ],
                     dtype=np.float32,
                 ),
                 wheel_slips.astype(np.float32, copy=False),
@@ -316,7 +326,11 @@ class ObservationEncoder:
 
         aux_offset = Car.NUM_LASERS + Car.SIGHT_TILES
         side_speed_idx = aux_offset + 1
+        segment_heading_error_idx = aux_offset + 2
+        next_segment_heading_error_idx = aux_offset + 3
         x[side_speed_idx] = -x[side_speed_idx]
+        x[segment_heading_error_idx] = -x[segment_heading_error_idx]
+        x[next_segment_heading_error_idx] = -x[next_segment_heading_error_idx]
         slip_offset = aux_offset + len(ObservationEncoder.BASE_FEATURE_NAMES)
         x[slip_offset : slip_offset + 2] = x[slip_offset : slip_offset + 2][::-1]
         x[slip_offset + 2 : slip_offset + 4] = x[slip_offset + 2 : slip_offset + 4][::-1]

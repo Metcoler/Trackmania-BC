@@ -47,7 +47,7 @@ class RacingGameEnviroment(gym.Env):
 
         # Observations:
         # [lasers N] + [path instructions M] +
-        # [speed, side_speed, next_point_dir, dt_ratio,
+        # [speed, side_speed, segment_heading_error, next_segment_heading_error, dt_ratio,
         #  slip_fl, slip_fr, slip_rl, slip_rr,
         #  longitudinal_accel, lateral_accel, yaw_rate,
         #  clearance_rate_sector_0..4]
@@ -175,7 +175,11 @@ class RacingGameEnviroment(gym.Env):
             self.controller.reset()
             self.controller.update()
             self.race_terminated = 1
-        elif not timed_out and info["next_point_direction"] < -0.5 and not self.never_quit:
+        elif (
+            not timed_out
+            and abs(float(info.get("segment_heading_error", 0.0))) > (2.0 / 3.0)
+            and not self.never_quit
+        ):
             self.controller.reset()
             self.controller.update()
             self.race_terminated = -1

@@ -38,7 +38,7 @@ The project also contains Trackmania map extraction assets and an OpenPlanet plu
    - laser distances
    - upcoming path instructions
    - progress info
-   - direction alignment
+   - signed near/far heading alignment against upcoming path segments
 6. `ObservationEncoder.py` standardizes those values into the neural-network observation vector.
 7. A policy from `EvolutionPolicy.py` maps observation -> action.
 8. `Enviroment.py` applies that action through `vgamepad` to Trackmania and enforces training guards such as timeout, touches, idle detection, and wall-ride detection.
@@ -50,10 +50,8 @@ The project also contains Trackmania map extraction assets and an OpenPlanet plu
 3. `EvolutionTrainer.py` evaluates each individual sequentially in Trackmania through `RacingGameEnviroment`.
 4. The environment returns terminal status and telemetry.
 5. The individual is ranked by:
-   - `term`
-   - `progress`
-   - `time_bucket`
-   - `distance`
+   - averaged rollout fitness across normal and mirrored evaluation
+   - telemetry summaries still keep representative aggregate metrics for logging
 6. The GA applies elitism, selection, crossover, mutation, and annealed mutation schedules.
 7. Training logs and checkpoints are stored under `logs/ga_runs/...`.
 
@@ -81,7 +79,8 @@ Current observation layout:
 - `10` path instructions
 - `speed`
 - `side_speed`
-- `next_point_direction`
+- `segment_heading_error`
+- `next_segment_heading_error`
 - `dt_ratio`
 - `FL/FR/RL/RR slip coefficients`
 - `longitudinal_accel`
@@ -91,7 +90,7 @@ Current observation layout:
 
 Current observation dimension:
 
-- `15 + 10 + 16 = 41`
+- `15 + 10 + 17 = 42`
 
 Current phased observation roadmap:
 
@@ -206,7 +205,7 @@ Responsibilities:
 - keep latest packet only
 - derive map/path progress
 - derive future path instructions
-- compute `next_point_direction`
+- compute signed heading errors for the current and next future path segment
 - compute lidar-style laser distances against map walls
 
 Important implementation detail:
@@ -222,6 +221,7 @@ Responsibilities:
 - parse exported block files from `Maps/ExportedBlocks/*.txt`
 - instantiate mesh blocks from `Meshes/*.obj`
 - construct the logical path from start to finish
+- expand block-level turn semantics into tile-aligned `path_instructions`
 - provide road mesh and wall mesh for geometry queries
 
 ### `ObservationEncoder.py`
@@ -635,6 +635,10 @@ These are active research/debug topics, not solved truths.
 - The exact amount of steer needed in Trackmania relative to the learned policy remains a practical issue.
 - The influence of observation design vs policy architecture is still unresolved.
 - The project has accumulated many safety/guard mechanisms; some may help, some may distort selection pressure.
+- The steering cue in `Car.py` now uses signed current/next segment heading errors instead of a pure dot-product alignment scalar.
+  This should preserve left/right information, but it is still worth verifying on live maps that the sign convention matches intuitive steering direction.
+- A previous bug came from `path_instructions` being stored at block granularity while `path_tile_index` advanced at tile granularity.
+  `Map.py` now expands instructions to tile-aligned entries so the lookahead slice in `Car.py` stays synchronized through multi-tile corners.
 
 
 ## Current Recommended Debugging Order

@@ -430,10 +430,73 @@ class EvolutionTrainer:
         total: Optional[int] = None,
         verbose: bool = False,
         mirrored: bool = False,
+        evaluate_both_mirrors: bool = False,
     ) -> float:
-        if verbose and index is not None and total is not None:
-            print(f"{index + 1}/{total} Evaluating individual...", end="\r")
+        if evaluate_both_mirrors:
+            normal_metrics = self._evaluate_single_rollout(
+                individual=individual,
+                mirrored=False,
+            )
+            mirrored_metrics = self._evaluate_single_rollout(
+                individual=individual,
+                mirrored=True,
+            )
+            rollout_metrics = [normal_metrics, mirrored_metrics]
+            mean_progress = float(
+                np.mean([metrics["total_progress"] for metrics in rollout_metrics])
+            )
+            mean_time = float(np.mean([metrics["time"] for metrics in rollout_metrics]))
+            mean_distance = float(
+                np.mean([metrics["distance"] for metrics in rollout_metrics])
+            )
+            mean_fitness = float(np.mean([metrics["fitness"] for metrics in rollout_metrics]))
+            representative_term = int(
+                min(int(metrics["term"]) for metrics in rollout_metrics)
+            )
 
+            individual.total_progress = mean_progress
+            individual.time = mean_time
+            individual.term = representative_term
+            individual.distance = mean_distance
+            individual.fitness = mean_fitness
+
+            if verbose and index is not None and total is not None:
+                normal_status = self._term_status_text(int(normal_metrics["term"]))
+                mirrored_status = self._term_status_text(int(mirrored_metrics["term"]))
+                print(
+                    f"{index + 1}/{total} "
+                    f"N:{normal_status} {normal_metrics['total_progress']:.1f}%/{normal_metrics['time']:.2f}s | "
+                    f"M:{mirrored_status} {mirrored_metrics['total_progress']:.1f}%/{mirrored_metrics['time']:.2f}s | "
+                    f"AVG progress={mean_progress:.1f}% | time={mean_time:.2f}s | score={mean_fitness:.2f}"
+                )
+            return mean_fitness
+
+        rollout_metrics = self._evaluate_single_rollout(
+            individual=individual,
+            mirrored=mirrored,
+        )
+        individual.total_progress = float(rollout_metrics["total_progress"])
+        individual.time = float(rollout_metrics["time"])
+        individual.term = int(rollout_metrics["term"])
+        individual.distance = float(rollout_metrics["distance"])
+        individual.fitness = float(rollout_metrics["fitness"])
+
+        if verbose and index is not None and total is not None:
+            status = self._term_status_text(individual.term)
+            mirror_tag = " [MIRROR]" if mirrored else ""
+            print(
+                f"{index + 1}/{total} "
+                f"{status} | progress={individual.total_progress:.1f}% | "
+                f"time={individual.time:.2f}s | score={individual.fitness:.2f}{mirror_tag}"
+            )
+
+        return float(individual.fitness)
+
+    def _evaluate_single_rollout(
+        self,
+        individual: Individual,
+        mirrored: bool = False,
+    ) -> Dict[str, float]:
         obs, info = self.env.reset()
         while info["done"] != 0:
             obs, info = self.env.reset()
@@ -473,24 +536,19 @@ class EvolutionTrainer:
         if info_done and term == 0:
             term = 1
 
-        individual.total_progress = total_progress
-        individual.time = t
-        individual.term = term
-        individual.distance = distance
-
-        scalar = individual.compute_scalar_fitness()
-        individual.fitness = scalar
-
-        if verbose and index is not None and total is not None:
-            status = self._term_status_text(term)
-            mirror_tag = " [MIRROR]" if mirrored else ""
-            print(
-                f"{index + 1}/{total} "
-                f"{status} | progress={total_progress:.1f}% | "
-                f"time={t:.2f}s | score={scalar:.2f}{mirror_tag}"
-            )
-
-        return scalar
+        scalar = Individual.compute_scalar_fitness_for(
+            term=term,
+            progress=total_progress,
+            time_value=t,
+            distance=distance,
+        )
+        return dict(
+            total_progress=total_progress,
+            time=t,
+            term=term,
+            distance=distance,
+            fitness=scalar,
+        )
 
     def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
         return ObservationEncoder.mirror_observation(obs)
@@ -519,10 +577,13 @@ class EvolutionTrainer:
         self,
         verbose: bool = False,
         mirror_flags: Optional[np.ndarray] = None,
+        evaluate_both_mirrors: bool = False,
     ) -> np.ndarray:
         n = len(self.population)
         fitnesses = np.zeros(n, dtype=np.float32)
-        if mirror_flags is None:
+        if evaluate_both_mirrors:
+            mirror_flags = np.zeros(n, dtype=bool)
+        elif mirror_flags is None:
             mirror_flags = np.zeros(n, dtype=bool)
         elif len(mirror_flags) != n:
             raise ValueError(
@@ -535,6 +596,7 @@ class EvolutionTrainer:
                 total=n,
                 verbose=verbose,
                 mirrored=bool(mirror_flags[i]),
+                evaluate_both_mirrors=evaluate_both_mirrors,
             )
         return fitnesses
 
@@ -746,6 +808,7 @@ class EvolutionTrainer:
         mutation_sigma_decay: float = 1.0,
         mutation_sigma_min: float = 0.0,
         mirror_episode_prob: float = 0.0,
+        evaluate_both_mirrors: bool = True,
         verbose: bool = True,
         dnf_time_for_plot: float = 30.0,
         checkpoint_every: int = 10,
@@ -786,6 +849,7 @@ class EvolutionTrainer:
                 mutation_sigma_decay=mutation_sigma_decay,
                 mutation_sigma_min=mutation_sigma_min,
                 mirror_episode_prob=mirror_episode_prob,
+                evaluate_both_mirrors=bool(evaluate_both_mirrors),
                 checkpoint_every=checkpoint_every,
                 dnf_time_for_plot=dnf_time_for_plot,
             )
@@ -829,7 +893,12 @@ class EvolutionTrainer:
                     loaded_count,
                     mirror_episode_prob=mirror_episode_prob,
                 )
-                if verbose and screening_mirror_flags.any():
+                if verbose and evaluate_both_mirrors:
+                    print(
+                        "Screening mode: evaluating every individual as normal and mirrored, "
+                        "then averaging both results."
+                    )
+                elif verbose and screening_mirror_flags.any():
                     print(
                         f"Screening mirror flags: "
                         f"{int(screening_mirror_flags.sum())}/{loaded_count}"
@@ -837,6 +906,7 @@ class EvolutionTrainer:
                 _ = self.evaluate_population(
                     verbose=verbose,
                     mirror_flags=screening_mirror_flags,
+                    evaluate_both_mirrors=evaluate_both_mirrors,
                 )
                 self.population.sort(reverse=True)
                 screened_best = self.population[0].copy()
@@ -873,7 +943,12 @@ class EvolutionTrainer:
                 len(self.population),
                 mirror_episode_prob=mirror_episode_prob,
             )
-            if verbose and gen_mirror_flags.any():
+            if verbose and evaluate_both_mirrors:
+                print(
+                    "Mirror eval: every individual runs normal + mirrored, "
+                    "selection uses the mean of both rollout scores."
+                )
+            elif verbose and gen_mirror_flags.any():
                 print(
                     f"Mirror flags this generation: "
                     f"{int(gen_mirror_flags.sum())}/{len(self.population)}"
@@ -882,6 +957,7 @@ class EvolutionTrainer:
             _ = self.evaluate_population(
                 verbose=verbose,
                 mirror_flags=gen_mirror_flags,
+                evaluate_both_mirrors=evaluate_both_mirrors,
             )
 
             progresses = np.array(
@@ -1156,10 +1232,10 @@ if __name__ == "__main__":
 
     # map dependend constants
     map_name = "AI Training #3"
-    env_max_time = 1000
+    env_max_time = 180
     
     # neural network architecture
-    hidden_dim = [32, 16]
+    hidden_dim = [64, 32]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     
@@ -1168,18 +1244,20 @@ if __name__ == "__main__":
     generations_to_run = 1000
     checkpoint_every = 50
 
-    mutation_prob = 0.3
-    mutation_prob_decay = 0.997
-    mutation_prob_min = 0.03
-    mutation_sigma = 0.5
-    mutation_sigma_decay = 0.99
-    mutation_sigma_min = 0.04
+    mutation_prob = 0.40
+    mutation_prob_decay = 0.996540
+    mutation_prob_min = 0.05
+
+    mutation_sigma = 0.80
+    mutation_sigma_decay = 0.995390
+    mutation_sigma_min = 0.05
 
 
     # Fancy updates
     mirror_episode_prob = 0.0
+    evaluate_both_mirrors = True
     target_steer_deadzone = 0.00
-    max_touches = 3
+    max_touches = 1
     
     
     # Other constants
@@ -1316,6 +1394,7 @@ if __name__ == "__main__":
             mutation_sigma_decay=mutation_sigma_decay,
             mutation_sigma_min=mutation_sigma_min,
             mirror_episode_prob=mirror_episode_prob,
+            evaluate_both_mirrors=evaluate_both_mirrors,
             verbose=True,
             dnf_time_for_plot=60.0,
             checkpoint_every=checkpoint_every,
@@ -1330,6 +1409,7 @@ if __name__ == "__main__":
                 hidden_activation=trainer.hidden_activation,
                 hidden_activations=list(trainer.hidden_activations),
                 target_steer_deadzone=target_steer_deadzone,
+                evaluate_both_mirrors=bool(evaluate_both_mirrors),
                 finetune_from_checkpoint=resume_checkpoint,
                 initial_population_source=initial_population_source,
                 initial_population_source_kind=initial_population_source_kind,

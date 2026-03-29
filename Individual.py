@@ -61,11 +61,17 @@ class Individual:
     def act(self, obs: np.ndarray) -> np.ndarray:
         return self.policy.act(obs)
 
-    def ranking_key(self) -> Tuple[int, float, int, float]:
-        term = int(self.term)
-        progress = float(self.total_progress)
-        dist = float(self.distance)
-        t = float(self.time)
+    @staticmethod
+    def ranking_key_for(
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+    ) -> Tuple[int, float, float, float]:
+        term = int(term)
+        progress = float(progress)
+        dist = float(distance)
+        t = float(time_value)
 
         if np.isfinite(t):
             time_bucket = int(np.floor(t))
@@ -83,8 +89,28 @@ class Individual:
         
         return (term, progress, -time_bucket, -dist)
 
-    def compute_scalar_fitness(self) -> float:
-        term, progress, neg_time_bucket, neg_dist = self.ranking_key()
+    def ranking_key(self) -> Tuple[int, float, float, float]:
+        return self.ranking_key_for(
+            term=self.term,
+            progress=self.total_progress,
+            time_value=self.time,
+            distance=self.distance,
+        )
+
+    @classmethod
+    def compute_scalar_fitness_for(
+        cls,
+        term: int,
+        progress: float,
+        time_value: float,
+        distance: float,
+    ) -> float:
+        term, progress, neg_time_bucket, neg_dist = cls.ranking_key_for(
+            term=term,
+            progress=progress,
+            time_value=time_value,
+            distance=distance,
+        )
         time_bucket = -neg_time_bucket
         dist = -neg_dist
 
@@ -94,14 +120,36 @@ class Individual:
         d = 1.0
         return term * a + progress * b - time_bucket * c - dist * d
 
+    def compute_scalar_fitness(self) -> float:
+        return self.compute_scalar_fitness_for(
+            term=self.term,
+            progress=self.total_progress,
+            time_value=self.time,
+            distance=self.distance,
+        )
+
     def __lt__(self, other: "Individual") -> bool:
         if not isinstance(other, Individual):
             return NotImplemented
+        if (
+            self.fitness is not None
+            and other.fitness is not None
+            and np.isfinite(self.fitness)
+            and np.isfinite(other.fitness)
+        ):
+            return float(self.fitness) < float(other.fitness)
         return self.ranking_key() < other.ranking_key()
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Individual):
             return NotImplemented
+        if (
+            self.fitness is not None
+            and other.fitness is not None
+            and np.isfinite(self.fitness)
+            and np.isfinite(other.fitness)
+        ):
+            return float(self.fitness) == float(other.fitness)
         return self.ranking_key() == other.ranking_key()
 
     def __repr__(self) -> str:
