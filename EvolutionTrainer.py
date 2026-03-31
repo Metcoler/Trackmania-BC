@@ -1235,7 +1235,7 @@ if __name__ == "__main__":
     env_max_time = 180
     
     # neural network architecture
-    hidden_dim = [64, 32]
+    hidden_dim = [48, 16]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
     
@@ -1245,18 +1245,18 @@ if __name__ == "__main__":
     generations_to_run = 300
     checkpoint_every = 50
 
-    mutation_prob = 0.40
-    mutation_prob_decay = 0.989657
-    mutation_prob_min = 0.05
+    mutation_prob = 0.06
+    mutation_prob_decay = 0.991081
+    mutation_prob_min = 0.01
 
-    mutation_sigma = 0.80
-    mutation_sigma_decay = 0.986233
-    mutation_sigma_min = 0.05
+    mutation_sigma = 0.12
+    mutation_sigma_decay = 0.991081
+    mutation_sigma_min = 0.02
 
 
     # Fancy updates
     mirror_episode_prob = 0.0
-    evaluate_both_mirrors = True
+    evaluate_both_mirrors = False
     target_steer_deadzone = 0.00
     max_touches = 1
     

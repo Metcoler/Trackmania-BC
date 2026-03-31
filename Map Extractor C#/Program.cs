@@ -2,7 +2,7 @@ using System;
 using System.IO;
 
 class Program {
-    private const string DefaultMapName = "AI Training #4";
+    private const string DefaultMapName = "AI Training #5";
 
     static int Main(string[] args) {
         string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
