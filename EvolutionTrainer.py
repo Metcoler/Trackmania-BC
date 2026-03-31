@@ -1241,15 +1241,16 @@ if __name__ == "__main__":
     
     # Evolution
     pop_size = 64
-    generations_to_run = 1000
+    elite_fraction = 0.25
+    generations_to_run = 300
     checkpoint_every = 50
 
     mutation_prob = 0.40
-    mutation_prob_decay = 0.996540
+    mutation_prob_decay = 0.989657
     mutation_prob_min = 0.05
 
     mutation_sigma = 0.80
-    mutation_sigma_decay = 0.995390
+    mutation_sigma_decay = 0.986233
     mutation_sigma_min = 0.05
 
 
@@ -1385,7 +1386,7 @@ if __name__ == "__main__":
 
         history = trainer.run(
             generations=generations_to_run,
-            elite_fraction=0.25,
+            elite_fraction=elite_fraction,
             # Exploratory start + annealing toward fine-tuning.
             mutation_prob=mutation_prob,
             mutation_sigma=mutation_sigma,
@@ -1396,7 +1397,7 @@ if __name__ == "__main__":
             mirror_episode_prob=mirror_episode_prob,
             evaluate_both_mirrors=evaluate_both_mirrors,
             verbose=True,
-            dnf_time_for_plot=60.0,
+            dnf_time_for_plot=env_max_time,
             checkpoint_every=checkpoint_every,
             training_config=dict(
                 map_name=map_name,
