@@ -237,6 +237,7 @@ class Map:
         self.generate_map_mesh()
         self.generate_walls_mesh()
         self.generate_road_mesh()
+        self.generate_road_traversal_data()
         self.generate_path_mesh()
 
     def tile_coordinate_to_point(logical_position, middle=True, dy=0):
@@ -353,6 +354,33 @@ class Map:
             scene.add_geometry(block.get_road_mesh())
         self.road_mesh = scene.dump(concatenate=True) 
 
+    @staticmethod
+    def _build_face_neighbors(mesh: trimesh.Trimesh) -> np.ndarray:
+        faces = np.asarray(mesh.faces, dtype=np.int32)
+        neighbors = -np.ones((len(faces), 3), dtype=np.int32)
+        edge_owner: dict[tuple[int, int], tuple[int, int]] = {}
+
+        # Barycentric index i corresponds to the edge opposite vertex i.
+        opposite_edges = ((1, 2), (0, 2), (0, 1))
+        for face_index, face in enumerate(faces):
+            for opposite_vertex_index, (edge_a_idx, edge_b_idx) in enumerate(opposite_edges):
+                edge = tuple(sorted((int(face[edge_a_idx]), int(face[edge_b_idx]))))
+                owner = edge_owner.get(edge)
+                if owner is None:
+                    edge_owner[edge] = (face_index, opposite_vertex_index)
+                    continue
+                other_face_index, other_opposite_vertex_index = owner
+                neighbors[face_index, opposite_vertex_index] = int(other_face_index)
+                neighbors[other_face_index, other_opposite_vertex_index] = int(face_index)
+        return neighbors
+
+    def generate_road_traversal_data(self):
+        self.road_traversal_mesh = self.road_mesh.copy()
+        # Weld shared seam vertices so face adjacency works across map blocks.
+        self.road_traversal_mesh.merge_vertices(digits_vertex=3)
+        self.road_traversal_mesh.remove_unreferenced_vertices()
+        self.road_face_neighbors = self._build_face_neighbors(self.road_traversal_mesh)
+
 
     def get_mesh(self):
         return self.mesh
@@ -362,6 +390,12 @@ class Map:
     
     def get_road_mesh(self):
         return self.road_mesh
+
+    def get_road_traversal_mesh(self):
+        return self.road_traversal_mesh
+
+    def get_road_face_neighbors(self):
+        return self.road_face_neighbors
     
     def get_path_line_mesh(self):
         return self.path_line_mesh

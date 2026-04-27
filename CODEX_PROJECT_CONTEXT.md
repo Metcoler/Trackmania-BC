@@ -42,6 +42,11 @@ The project also contains Trackmania map extraction assets and an OpenPlanet plu
 6. `ObservationEncoder.py` standardizes those values into the neural-network observation vector.
 7. A policy from `EvolutionPolicy.py` maps observation -> action.
 8. `Enviroment.py` applies that action through `vgamepad` to Trackmania and enforces training guards such as timeout, touches, idle detection, and wall-ride detection.
+9. `Enviroment.reset()` now performs a confirmed track restart handshake:
+   - press `B` on the virtual gamepad
+   - poll live telemetry until a negative `time` is observed
+   - retry the `B` press several times if negative time is not seen
+   This prevents the next individual from inheriting stale state from the previous attempt when Trackmania does not restart on the first button press.
 
 ### GA training dataflow
 
@@ -52,8 +57,13 @@ The project also contains Trackmania map extraction assets and an OpenPlanet plu
 5. The individual is ranked by:
    - averaged rollout fitness across normal and mirrored evaluation
    - telemetry summaries still keep representative aggregate metrics for logging
-6. The GA applies elitism, selection, crossover, mutation, and annealed mutation schedules.
+6. The GA applies elitism, selection from the top half, arithmetic-mean crossover, mutation, and annealed mutation schedules.
+   Parent pairing now happens without repetition inside each pairing round; once the round is exhausted,
+   the top-half parent pool is reshuffled and paired again if more children are still needed.
 7. Training logs and checkpoints are stored under `logs/ga_runs/...`.
+8. Population checkpoints now also store `current_mutation_prob` and `current_mutation_sigma`
+   so resume can continue the annealing schedule from the actual checkpoint state instead of
+   reusing only the values from the trainer script.
 
 ### Supervised dataflow
 
@@ -76,7 +86,7 @@ The current observation is built in `ObservationEncoder.py`.
 Current observation layout:
 
 - `15` laser distances
-- `10` path instructions
+- `5` path instructions
 - `speed`
 - `side_speed`
 - `segment_heading_error`
@@ -90,7 +100,44 @@ Current observation layout:
 
 Current observation dimension:
 
-- `15 + 10 + 17 = 42`
+- `15 + 5 + 17 = 37`
+
+Current short-horizon settings:
+
+- path lookahead horizon is `5` tiles
+- lidar max range is `160` world units
+
+Optional vertical-mode extension:
+
+- `vertical_mode=False`
+  - keeps the existing 2D observation unchanged at `37`
+  - uses the legacy flat wall-only lidar
+- `vertical_mode=True`
+  - keeps the same leading `37` features
+  - appends:
+    - `vertical_speed`
+    - `forward_y`
+    - `support_normal_y`
+    - `cross_slope`
+    - `5` overlapping `surface_elevation_sector_*` features
+  - current vertical-mode observation dimension is `46`
+
+Current vertical-mode sensor semantics:
+
+- `Car.py` can now run in a surface-following lidar mode
+- the sensor first finds the local road support point/normal under the car
+- laser directions are rotated around the current support normal instead of only world `Y`
+- `Map.py` now also builds a welded `road_traversal_mesh`
+  - created from `road_mesh`
+  - vertices are merged with `merge_vertices(digits_vertex=3)` so seams between blocks share triangle adjacency
+- each laser now traverses the road exactly triangle-by-triangle instead of using fixed marching steps
+  - project the laser direction into the current triangle plane
+  - walk to that triangle's exit edge
+  - cross to the adjacent triangle through the shared edge
+  - stop early if a wall is hit before the exit edge
+- wall checks are still performed against `walls_mesh`
+- when `vertical_mode=False`, the old flat `walls_mesh`-only raycast remains active
+- `surface_step_size` is kept only for backward config compatibility; the exact triangle traversal no longer depends on fixed marching steps
 
 Current phased observation roadmap:
 
@@ -106,7 +153,19 @@ Current phased observation roadmap:
   - add gear
   - add rpm
 - later 3D upgrade
-  - add vertical / airborne / orientation metrics needed for jumps and height changes
+  - current first 3D step
+    - add toggleable `vertical_mode`
+    - add exact triangle-traversal surface-following lidar distances
+    - add compact vertical block:
+      - `vertical_speed`
+      - `forward_y`
+      - `support_normal_y`
+      - `cross_slope`
+      - `surface_elevation_sector_0..4`
+  - later 3D expansion
+    - add airborne/contact metrics
+    - add richer orientation metrics
+    - add more advanced surface/material state when needed
 
 Important history:
 
@@ -207,6 +266,8 @@ Responsibilities:
 - derive future path instructions
 - compute signed heading errors for the current and next future path segment
 - compute lidar-style laser distances against map walls
+- in `vertical_mode`, compute exact surface-following laser distances over welded road triangles
+- expose support-normal / slope debug data for the observation encoder and vizualizer
 
 Important implementation detail:
 
@@ -223,6 +284,7 @@ Responsibilities:
 - construct the logical path from start to finish
 - expand block-level turn semantics into tile-aligned `path_instructions`
 - provide road mesh and wall mesh for geometry queries
+- provide welded road traversal data for exact triangle-to-triangle 3D laser walking
 
 ### `ObservationEncoder.py`
 
@@ -233,6 +295,7 @@ Responsibilities:
 - standardize distances and motion values
 - standardize per-wheel slip coefficients
 - derive compact temporal motion features from previous vs current frame
+- optionally append compact vertical terrain features in `vertical_mode`
 - compute `dt_ratio = dt / dt_ref`
 - expose observation bounds
 - provide mirror helpers for observations and actions

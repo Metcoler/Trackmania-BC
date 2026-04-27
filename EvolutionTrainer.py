@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from Car import Car
 from EvolutionPolicy import EvolutionPolicy
 from Individual import Individual
 from ObservationEncoder import ObservationEncoder
@@ -181,6 +182,10 @@ class TrainingLogger:
         hidden_dim: HiddenDims,
         act_dim: int,
         best_individual: Optional[Individual] = None,
+        current_mutation_prob: Optional[float] = None,
+        current_mutation_sigma: Optional[float] = None,
+        observation_layout: Optional[Sequence[str]] = None,
+        vertical_mode: bool = False,
     ) -> str:
         checkpoint_path = os.path.join(
             self.checkpoints_dir, f"population_gen_{generation:04d}.npz"
@@ -209,7 +214,20 @@ class TrainingLogger:
             obs_dim=np.array([obs_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
             hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
+            vertical_mode=np.array([int(bool(vertical_mode))], dtype=np.int32),
         )
+        if observation_layout is not None:
+            payload["observation_layout"] = np.array(list(observation_layout), dtype=str)
+        if current_mutation_prob is not None:
+            payload["current_mutation_prob"] = np.array(
+                [float(current_mutation_prob)],
+                dtype=np.float32,
+            )
+        if current_mutation_sigma is not None:
+            payload["current_mutation_sigma"] = np.array(
+                [float(current_mutation_sigma)],
+                dtype=np.float32,
+            )
         hidden_dims = normalize_hidden_dims(hidden_dim)
         if len(hidden_dims) == 1:
             payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
@@ -247,6 +265,8 @@ class TrainingLogger:
         hidden_dim: HiddenDims,
         act_dim: int,
         best_individual: Optional[Individual] = None,
+        observation_layout: Optional[Sequence[str]] = None,
+        vertical_mode: bool = False,
     ) -> str:
         final_path = self.final_population_path
         genomes = np.stack([ind.genome for ind in population]).astype(np.float32)
@@ -272,7 +292,10 @@ class TrainingLogger:
             obs_dim=np.array([obs_dim], dtype=np.int32),
             act_dim=np.array([act_dim], dtype=np.int32),
             hidden_dims=np.array(normalize_hidden_dims(hidden_dim), dtype=np.int32),
+            vertical_mode=np.array([int(bool(vertical_mode))], dtype=np.int32),
         )
+        if observation_layout is not None:
+            payload["observation_layout"] = np.array(list(observation_layout), dtype=str)
         hidden_dims = normalize_hidden_dims(hidden_dim)
         if len(hidden_dims) == 1:
             payload["hidden_dim"] = np.array([hidden_dims[0]], dtype=np.int32)
@@ -291,11 +314,22 @@ class TrainingLogger:
         if best_individual is not None:
             best_individual.policy.save(
                 self.final_population_model_path,
-                extra=self._policy_extra(best_individual, generation),
+                extra=self._policy_extra(
+                    best_individual,
+                    generation,
+                    observation_layout=observation_layout,
+                    vertical_mode=vertical_mode,
+                ),
             )
         return final_path
 
-    def save_best_individual(self, best: Individual, generation: Optional[int] = None) -> str:
+    def save_best_individual(
+        self,
+        best: Individual,
+        generation: Optional[int] = None,
+        observation_layout: Optional[Sequence[str]] = None,
+        vertical_mode: bool = False,
+    ) -> str:
         payload = dict(
             genome=best.genome.astype(np.float32),
             total_progress=float(best.total_progress),
@@ -312,20 +346,35 @@ class TrainingLogger:
         np.savez(self.global_best_path, **payload)
         # Backward compatibility for older tooling.
         np.savez(self.best_individual_path, **payload)
-        extra = self._policy_extra(best, generation)
+        extra = self._policy_extra(
+            best,
+            generation,
+            observation_layout=observation_layout,
+            vertical_mode=vertical_mode,
+        )
         best.policy.save(self.global_best_model_path, extra=extra)
         best.policy.save(self.best_individual_model_path, extra=extra)
         return self.global_best_path
 
     @staticmethod
-    def _policy_extra(best: Individual, generation: Optional[int]) -> Dict:
+    def _policy_extra(
+        best: Individual,
+        generation: Optional[int],
+        observation_layout: Optional[Sequence[str]] = None,
+        vertical_mode: bool = False,
+    ) -> Dict:
         extra: Dict = dict(
             total_progress=float(best.total_progress),
             time=float(best.time),
             term=int(best.term),
             distance=float(best.distance),
             fitness=np.nan if best.fitness is None else float(best.fitness),
-            observation_layout=ObservationEncoder.feature_names(),
+            observation_layout=list(
+                observation_layout
+                if observation_layout is not None
+                else ObservationEncoder.feature_names(vertical_mode=vertical_mode)
+            ),
+            vertical_mode=bool(vertical_mode),
         )
         if generation is not None:
             extra["generation"] = int(generation)
@@ -346,6 +395,7 @@ class EvolutionTrainer:
         hidden_activation: HiddenActivations = "tanh",
         target_steer_deadzone: float = 0.0,
         logger: Optional[TrainingLogger] = None,
+        observation_layout: Optional[Sequence[str]] = None,
     ) -> None:
         self.env = env
         self.obs_dim = obs_dim
@@ -364,6 +414,14 @@ class EvolutionTrainer:
             self.hidden_activations[0]
             if len(self.hidden_activations) == 1
             else list(self.hidden_activations)
+        )
+        self.vertical_mode = bool(
+            getattr(getattr(env, "obs_encoder", None), "vertical_mode", False)
+        )
+        self.observation_layout = list(
+            observation_layout
+            if observation_layout is not None
+            else ObservationEncoder.feature_names(vertical_mode=self.vertical_mode)
         )
         self.target_steer_deadzone = float(target_steer_deadzone)
         self.logger = logger
@@ -387,6 +445,8 @@ class EvolutionTrainer:
         # Ak načítame checkpoint vyhodnotenej generácie, prvý krok run() má vytvoriť ďalšiu.
         self._loaded_checkpoint_evaluated: bool = False
         self._pending_initial_downselect: bool = False
+        self._checkpoint_current_mutation_prob: Optional[float] = None
+        self._checkpoint_current_mutation_sigma: Optional[float] = None
 
     @staticmethod
     def _term_status_text(term: int) -> str:
@@ -551,7 +611,10 @@ class EvolutionTrainer:
         )
 
     def _mirror_observation(self, obs: np.ndarray) -> np.ndarray:
-        return ObservationEncoder.mirror_observation(obs)
+        return ObservationEncoder.mirror_observation(
+            obs,
+            vertical_mode=self.vertical_mode,
+        )
 
     @staticmethod
     def _mirror_action_delta(action: np.ndarray) -> np.ndarray:
@@ -616,14 +679,22 @@ class EvolutionTrainer:
             ind.copy() for ind in self.population[:elite_count]
         ]
 
-        parent_indices = np.arange(parent_pool_size)
         while len(new_population) < self.pop_size:
-            i1, i2 = np.random.choice(parent_indices, size=2, replace=False)
-            p1 = parents[int(i1)]
-            p2 = parents[int(i2)]
-            child = p1.crossover(p2)
-            child.mutate(mutation_prob=mutation_prob, sigma=mutation_sigma)
-            new_population.append(child)
+            shuffled_indices = np.random.permutation(parent_pool_size)
+            usable_count = int(shuffled_indices.size - (shuffled_indices.size % 2))
+            if usable_count <= 0:
+                raise RuntimeError("Parent pool must contain at least two individuals.")
+
+            for pair_start in range(0, usable_count, 2):
+                if len(new_population) >= self.pop_size:
+                    break
+                i1 = int(shuffled_indices[pair_start])
+                i2 = int(shuffled_indices[pair_start + 1])
+                p1 = parents[i1]
+                p2 = parents[i2]
+                child = p1.crossover(p2)
+                child.mutate(mutation_prob=mutation_prob, sigma=mutation_sigma)
+                new_population.append(child)
 
         self.population = new_population
 
@@ -830,7 +901,8 @@ class EvolutionTrainer:
         if self.logger is not None:
             cfg = dict(
                 obs_dim=self.obs_dim,
-                observation_layout=ObservationEncoder.feature_names(),
+                observation_layout=list(self.observation_layout),
+                vertical_mode=bool(self.vertical_mode),
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 pop_size=self.pop_size,
@@ -864,6 +936,25 @@ class EvolutionTrainer:
         mutation_sigma_decay = float(mutation_sigma_decay)
         mutation_sigma_min = float(mutation_sigma_min)
 
+        restored_mutation_state = (
+            self._loaded_checkpoint_evaluated
+            and self._checkpoint_current_mutation_prob is not None
+            and self._checkpoint_current_mutation_sigma is not None
+        )
+        if restored_mutation_state:
+            current_mutation_prob = float(self._checkpoint_current_mutation_prob)
+            current_mutation_sigma = float(self._checkpoint_current_mutation_sigma)
+            if verbose:
+                print(
+                    "Restored mutation state from checkpoint: "
+                    f"prob={current_mutation_prob:.6f}, sigma={current_mutation_sigma:.6f}"
+                )
+        elif self._loaded_checkpoint_evaluated and verbose:
+            print(
+                "Checkpoint does not contain saved mutation state. "
+                "Using mutation values from the current trainer script."
+            )
+
         if self._loaded_checkpoint_evaluated:
             if verbose:
                 print(
@@ -876,6 +967,8 @@ class EvolutionTrainer:
                 mutation_sigma=current_mutation_sigma,
             )
             self._loaded_checkpoint_evaluated = False
+            self._checkpoint_current_mutation_prob = None
+            self._checkpoint_current_mutation_sigma = None
 
         if self._pending_initial_downselect:
             loaded_count = len(self.population)
@@ -927,7 +1020,12 @@ class EvolutionTrainer:
 
         # Ensure global best artifact exists from the start (useful when resuming).
         if self.logger is not None and best_so_far is not None:
-            self.logger.save_best_individual(best_so_far, generation=self.generation)
+            self.logger.save_best_individual(
+                best_so_far,
+                generation=self.generation,
+                observation_layout=self.observation_layout,
+                vertical_mode=self.vertical_mode,
+            )
 
         for local_gen in range(generations):
             current_generation = self.generation + 1
@@ -1017,6 +1115,8 @@ class EvolutionTrainer:
                 global_best_path = self.logger.save_best_individual(
                     best_so_far,
                     generation=current_generation,
+                    observation_layout=self.observation_layout,
+                    vertical_mode=self.vertical_mode,
                 )
                 if verbose:
                     print(f"Global best updated: {global_best_path}")
@@ -1037,6 +1137,10 @@ class EvolutionTrainer:
                     hidden_dim=self.hidden_dim,
                     act_dim=self.act_dim,
                     best_individual=best_so_far,
+                    current_mutation_prob=current_mutation_prob,
+                    current_mutation_sigma=current_mutation_sigma,
+                    observation_layout=self.observation_layout,
+                    vertical_mode=self.vertical_mode,
                 )
                 if verbose:
                     print(f"Checkpoint saved: {checkpoint_path}")
@@ -1059,7 +1163,12 @@ class EvolutionTrainer:
         self.best_individual = best_so_far
 
         if self.logger is not None and self.best_individual is not None:
-            self.logger.save_best_individual(self.best_individual, generation=self.generation)
+            self.logger.save_best_individual(
+                self.best_individual,
+                generation=self.generation,
+                observation_layout=self.observation_layout,
+                vertical_mode=self.vertical_mode,
+            )
             self.logger.save_final_population(
                 population=self.population,
                 generation=self.generation,
@@ -1067,6 +1176,8 @@ class EvolutionTrainer:
                 hidden_dim=self.hidden_dim,
                 act_dim=self.act_dim,
                 best_individual=self.best_individual,
+                observation_layout=self.observation_layout,
+                vertical_mode=self.vertical_mode,
             )
 
         return history
@@ -1147,6 +1258,16 @@ class EvolutionTrainer:
         terms = data["terms"] if "terms" in data.files else None
         distances = data["distances"] if "distances" in data.files else None
         fitnesses = data["fitnesses"] if "fitnesses" in data.files else None
+        checkpoint_current_mutation_prob = (
+            float(np.asarray(data["current_mutation_prob"]).reshape(-1)[0])
+            if "current_mutation_prob" in data.files
+            else None
+        )
+        checkpoint_current_mutation_sigma = (
+            float(np.asarray(data["current_mutation_sigma"]).reshape(-1)[0])
+            if "current_mutation_sigma" in data.files
+            else None
+        )
 
         restored_population: List[Individual] = []
         for i in range(loaded_pop_size):
@@ -1182,6 +1303,8 @@ class EvolutionTrainer:
         self._pending_initial_downselect = (
             (loaded_pop_size > self.pop_size) and (not assume_evaluated_generation)
         )
+        self._checkpoint_current_mutation_prob = checkpoint_current_mutation_prob
+        self._checkpoint_current_mutation_sigma = checkpoint_current_mutation_sigma
 
         if "best_genome" in data.files:
             best = Individual(
@@ -1231,27 +1354,28 @@ if __name__ == "__main__":
     from Enviroment import RacingGameEnviroment
 
     # map dependend constants
-    map_name = "AI Training #3"
-    env_max_time = 180
+    map_name = "AI Training #5"
+    env_max_time = 30
     
     # neural network architecture
-    hidden_dim = [48, 16]
+    hidden_dim = [32, 16]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    
+    vertical_mode = False
+
     # Evolution
-    pop_size = 64
+    pop_size = 32
     elite_fraction = 0.25
-    generations_to_run = 300
-    checkpoint_every = 50
+    generations_to_run = 100
+    checkpoint_every = 10
 
-    mutation_prob = 0.06
-    mutation_prob_decay = 0.991081
-    mutation_prob_min = 0.01
+    mutation_prob = 0.20
+    mutation_prob_decay = 1.0
+    mutation_prob_min = 0.20
 
-    mutation_sigma = 0.12
-    mutation_sigma_decay = 0.991081
-    mutation_sigma_min = 0.02
+    mutation_sigma = 0.5
+    mutation_sigma_decay = 0.99
+    mutation_sigma_min = 0.20
 
 
     # Fancy updates
@@ -1266,12 +1390,17 @@ if __name__ == "__main__":
     max_steps = None
     env_dt_ref = 1.0 / 100.0
     env_dt_ratio_clip = 3.0
+    surface_step_size = Car.SURFACE_STEP_SIZE
+    surface_probe_height = Car.SURFACE_PROBE_HEIGHT
+    surface_ray_lift = Car.SURFACE_RAY_LIFT
     policy_action_scale = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-    start_idle_max_time = 3.0
+    start_idle_max_time = 2.0
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
     
     # Train from checkpoint or supervised predtrainded model
-    initial_population_source: Optional[str] = None
+    initial_population_source: Optional[str] = (
+        r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
+    )
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
     seed_model_exact_copies = 2
     seed_model_mutation_probs = (0.015, 0.04, 0.08)
@@ -1279,7 +1408,7 @@ if __name__ == "__main__":
     
     # True = TM checkpoint already evaluated in TM -> continue from next generation.
     # False = mini pretrain checkpoint -> evaluate loaded population in TM first.
-    resume_assume_evaluated_generation = False
+    resume_assume_evaluated_generation = True
 
     resume_checkpoint: Optional[str] = None
     seed_model_path: Optional[str] = None
@@ -1313,6 +1442,10 @@ if __name__ == "__main__":
         action_mode=action_mode,
         dt_ref=env_dt_ref,
         dt_ratio_clip=env_dt_ratio_clip,
+        vertical_mode=vertical_mode,
+        surface_step_size=surface_step_size,
+        surface_probe_height=surface_probe_height,
+        surface_ray_lift=surface_ray_lift,
         max_time=env_max_time,
         max_touches=max_touches,
         start_idle_max_time=start_idle_max_time,
@@ -1331,7 +1464,7 @@ if __name__ == "__main__":
             source_run_name = os.path.basename(os.path.dirname(os.path.dirname(resume_checkpoint)))
             run_name = (
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                f"_tm_finetune_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+                f"_tm_finetune_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
                 f"_src_{source_run_name}_{source_checkpoint_name}"
             )
             logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
@@ -1339,14 +1472,14 @@ if __name__ == "__main__":
         source_model_name = os.path.splitext(os.path.basename(seed_model_path))[0]
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_tm_seed_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_tm_seed_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
             f"_src_{source_model_name}"
         )
         logger = TrainingLogger(base_dir="logs/tm_finetune_runs", run_name=run_name)
     else:
         run_name = (
             f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            f"_map_{map_name}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
+            f"_map_{map_name}_{'v3d' if vertical_mode else 'v2d'}_h{hidden_dims_tag(hidden_dim)}_p{pop_size}"
         )
         logger = TrainingLogger(run_name=run_name)
 
@@ -1362,6 +1495,7 @@ if __name__ == "__main__":
         hidden_activation=hidden_activation,
         target_steer_deadzone=target_steer_deadzone,
         logger=logger,
+        observation_layout=env.obs_encoder.feature_names(vertical_mode=env.obs_encoder.vertical_mode),
     )
 
     try:
@@ -1405,6 +1539,10 @@ if __name__ == "__main__":
                 env_max_time=env_max_time,
                 env_dt_ref=env_dt_ref,
                 env_dt_ratio_clip=env_dt_ratio_clip,
+                vertical_mode=vertical_mode,
+                surface_step_size=surface_step_size,
+                surface_probe_height=surface_probe_height,
+                surface_ray_lift=surface_ray_lift,
                 action_mode=action_mode,
                 policy_action_scale=policy_action_scale.tolist(),
                 hidden_activation=trainer.hidden_activation,

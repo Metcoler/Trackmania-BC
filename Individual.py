@@ -79,11 +79,12 @@ class Individual:
             time_bucket = 10**9
 
 
-        # If player didn't reach 50% don't consider time
-        if progress < 50:
-            return (term, progress, 0, 0)
+        # If player didn't reach 20% don't consider time
+        # if progress < 20:
+        #   return (term, progress, 0, 0)
         
         # If agent didn't finish, don't consider min distance
+        term = 0
         if term <= 0:
             return (term, progress, -t, 0)
         
@@ -190,10 +191,9 @@ class Individual:
         if self.genome.shape != other.genome.shape:
             raise ValueError("Individuals have different genome sizes.")
 
-        point = np.random.randint(1, self.genome.size)
-        child_genome = np.empty_like(self.genome)
-        child_genome[:point] = self.genome[:point]
-        child_genome[point:] = other.genome[point:]
+        child_genome = (
+            0.5 * (self.genome.astype(np.float32) + other.genome.astype(np.float32))
+        ).astype(np.float32, copy=False)
 
         return Individual(
             obs_dim=self.policy.obs_dim,

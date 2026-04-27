@@ -10,6 +10,15 @@ from ObservationEncoder import ObservationEncoder
 
 
 class RacingGameEnviroment(gym.Env):
+    RESET_BUTTON_HOLD_SECONDS = 0.30
+    RESET_CONFIRM_TIMEOUT_SECONDS = 0.50
+    RESET_RETRY_COOLDOWN_SECONDS = 0.20
+    RESET_MAX_ATTEMPTS = 10
+    RESET_CONFIRM_MIN_TIME_DROP_SECONDS = 0.25
+    RESET_CONFIRM_MAX_START_TIME_SECONDS = 0.75
+    RESET_CONFIRM_MAX_START_DISTANCE = 5.0
+    RESET_CONFIRM_MAX_START_SPEED = 8.0
+
     def __init__(
         self,
         map_name,
@@ -18,6 +27,10 @@ class RacingGameEnviroment(gym.Env):
         action_mode: str = "delta",
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
+        vertical_mode: bool = False,
+        surface_step_size: float = Car.SURFACE_STEP_SIZE,
+        surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
+        surface_ray_lift: float = Car.SURFACE_RAY_LIFT,
         max_touches: int = 1,
         touch_distance_threshold: float = 2.0,
         touch_release_distance_threshold: float = 4.0,
@@ -34,12 +47,15 @@ class RacingGameEnviroment(gym.Env):
     ) -> None:
         super().__init__()
         print("Creating the RacingGameEnviroment")
+        self.vertical_mode = bool(vertical_mode)
         self.obs_encoder = ObservationEncoder(
             dt_ref=dt_ref,
             dt_ratio_clip=dt_ratio_clip,
+            vertical_mode=self.vertical_mode,
         )
         self.dt_ref = self.obs_encoder.dt_ref
         self.dt_ratio_clip = self.obs_encoder.dt_ratio_clip
+        self.laser_max_distance = self.obs_encoder.laser_max_distance
         action_mode = str(action_mode).strip().lower()
         if action_mode not in {"delta", "target"}:
             raise ValueError("action_mode must be 'delta' or 'target'.")
@@ -51,6 +67,9 @@ class RacingGameEnviroment(gym.Env):
         #  slip_fl, slip_fr, slip_rl, slip_rr,
         #  longitudinal_accel, lateral_accel, yaw_rate,
         #  clearance_rate_sector_0..4]
+        # optional vertical block (when vertical_mode=True):
+        # [vertical_speed, forward_y, support_normal_y, cross_slope,
+        #  surface_elevation_sector_0..4]
         obs_dim = self.obs_encoder.obs_dim
         obs_low, obs_high = self.obs_encoder.get_observation_bounds(action_mode=self.action_mode)
         self.observation_space = gym.spaces.Box(
@@ -76,7 +95,13 @@ class RacingGameEnviroment(gym.Env):
         
         # Create the car and the map
         self.map = Map(map_name)
-        self.car = Car(self.map)
+        self.car = Car(
+            self.map,
+            vertical_mode=self.vertical_mode,
+            surface_step_size=surface_step_size,
+            surface_probe_height=surface_probe_height,
+            surface_ray_lift=surface_ray_lift,
+        )
         
         # Gamepad
         self.controller = vgamepad.VX360Gamepad()
@@ -106,30 +131,145 @@ class RacingGameEnviroment(gym.Env):
         self._stuck_since_time = None
         self.current_dt_ratio = 1.0
 
-    
-    def reset(self, seed=None):
-        
-        super().reset(seed=seed)
-        self.reset_game()
+    def _clear_episode_runtime_state(self) -> None:
         self.current_step = 0
         self.obs_encoder.reset()
         self.current_dt_ratio = 1.0
-        self.previous_observation_info = distances, instructions, info = self.observation_info()
         self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-        self.previous_observation = observation = self.build_observation(
-            distances=distances,
-            instructions=instructions,
-            info=info,
+        self.previous_observation = np.zeros(self.observation_space.shape, dtype=np.float32)
+        self.previous_observation_info = (
+            [self.laser_max_distance for _ in range(Car.NUM_LASERS)],
+            [0 for _ in range(Car.SIGHT_TILES)],
+            {"time": -1.0, "done": 0.0},
         )
-        
-        self.race_terminated = 0 
+        self.race_terminated = 0
         self.touch_count = 0
         self._laser_touch_latched = False
         self._stall_touch_latched = False
         self._wall_contact_since_time = None
         self._stuck_since_time = None
+        self.car.reset()
 
-        
+    def _neutralize_controller(self) -> None:
+        self.previous_action = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.controller.reset()
+        self.controller.update()
+
+    def _press_restart_button(self) -> None:
+        self._neutralize_controller()
+        self.controller.press_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_B)
+        self.controller.update()
+        time.sleep(self.RESET_BUTTON_HOLD_SECONDS)
+        self.controller.release_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_B)
+        self.controller.update()
+        self._neutralize_controller()
+
+    def _is_reset_confirmed(
+        self,
+        info,
+        baseline_time: float | None,
+        baseline_distance: float | None,
+    ) -> bool:
+        current_time = float(info.get("time", 0.0))
+        if current_time < 0.0:
+            return True
+
+        if np.isfinite(current_time) and baseline_time is not None and np.isfinite(baseline_time):
+            if current_time < (float(baseline_time) - self.RESET_CONFIRM_MIN_TIME_DROP_SECONDS):
+                return True
+
+        current_distance = float(info.get("distance", 0.0))
+        current_speed = abs(float(info.get("speed", 0.0)))
+        current_progress = float(info.get("total_progress", 0.0))
+        near_fresh_start = (
+            current_time <= self.RESET_CONFIRM_MAX_START_TIME_SECONDS
+            and current_distance <= self.RESET_CONFIRM_MAX_START_DISTANCE
+            and current_speed <= self.RESET_CONFIRM_MAX_START_SPEED
+            and current_progress <= max(1.0, self.start_idle_progress_epsilon)
+        )
+        if not near_fresh_start:
+            return False
+
+        if baseline_time is not None and np.isfinite(baseline_time):
+            if current_time < (float(baseline_time) - self.RESET_CONFIRM_MIN_TIME_DROP_SECONDS):
+                return True
+
+        if baseline_distance is not None and np.isfinite(baseline_distance):
+            if current_distance < (float(baseline_distance) - 1.0):
+                return True
+
+        return False
+
+    def _wait_for_reset_confirmation(
+        self,
+        baseline_time: float | None,
+        baseline_distance: float | None,
+        timeout_seconds: float,
+    ):
+        deadline = time.monotonic() + float(timeout_seconds)
+        last_payload = None
+        while time.monotonic() < deadline:
+            distances, instructions, info = self.observation_info()
+            last_payload = (distances, instructions, info)
+            if self._is_reset_confirmed(
+                info=info,
+                baseline_time=baseline_time,
+                baseline_distance=baseline_distance,
+            ):
+                return distances, instructions, info
+        return last_payload
+
+    def _reset_track_until_confirmed(self):
+        baseline_payload = self.observation_info()
+        baseline_distances, baseline_instructions, baseline_info = baseline_payload
+        baseline_time = float(baseline_info.get("time", 0.0))
+        baseline_distance = float(baseline_info.get("distance", 0.0))
+        if self._is_reset_confirmed(
+            info=baseline_info,
+            baseline_time=None,
+            baseline_distance=None,
+        ):
+            return baseline_distances, baseline_instructions, baseline_info
+
+        last_info = baseline_info
+        for attempt in range(1, self.RESET_MAX_ATTEMPTS + 1):
+            self._press_restart_button()
+            payload = self._wait_for_reset_confirmation(
+                baseline_time=baseline_time,
+                baseline_distance=baseline_distance,
+                timeout_seconds=self.RESET_CONFIRM_TIMEOUT_SECONDS,
+            )
+            if payload is not None:
+                distances, instructions, info = payload
+                last_info = info
+                if self._is_reset_confirmed(
+                    info=info,
+                    baseline_time=baseline_time,
+                    baseline_distance=baseline_distance,
+                ):
+                    return distances, instructions, info
+                baseline_time = float(info.get("time", baseline_time))
+                baseline_distance = float(info.get("distance", baseline_distance))
+            if attempt < self.RESET_MAX_ATTEMPTS:
+                time.sleep(self.RESET_RETRY_COOLDOWN_SECONDS)
+
+        last_time = None if last_info is None else float(last_info.get("time", float("nan")))
+        raise RuntimeError(
+            "Failed to confirm Trackmania reset after "
+            f"{self.RESET_MAX_ATTEMPTS} B-button attempts; last observed time={last_time!r}."
+        )
+
+    
+    def reset(self, seed=None):
+        super().reset(seed=seed)
+        self._clear_episode_runtime_state()
+        distances, instructions, info = self._reset_track_until_confirmed()
+        self.previous_observation = observation = self.build_observation(
+            distances=distances,
+            instructions=instructions,
+            info=info,
+        )
+        self.previous_observation_info = (distances, instructions, info)
         return observation, info
 
     def step(self, action):
@@ -386,16 +526,14 @@ class RacingGameEnviroment(gym.Env):
         self.controller.left_joystick_float(steer_angle, 0)
 
     def reset_game(self):
-        self.controller.reset()
-        self.controller.press_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_B)
-        self.controller.update()
-        time.sleep(0.3)
-        self.controller.release_button(vgamepad.XUSB_BUTTON.XUSB_GAMEPAD_B)
-        self.controller.update()
-        self.car.reset()
-        self.controller.reset()
-        self.controller.update()
-        time.sleep(1)
+        self._clear_episode_runtime_state()
+        distances, instructions, info = self._reset_track_until_confirmed()
+        self.previous_observation_info = (distances, instructions, info)
+        self.previous_observation = self.build_observation(
+            distances=distances,
+            instructions=instructions,
+            info=info,
+        )
 
     def close(self):
         # Make sure the virtual gamepad is left in neutral state when the program exits.

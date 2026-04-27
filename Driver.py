@@ -134,6 +134,7 @@ def load_population(
             "obs_dim": _read_optional_scalar_int(data, "obs_dim"),
             "hidden_dim": _read_optional_scalar_int(data, "hidden_dim"),
             "act_dim": _read_optional_scalar_int(data, "act_dim"),
+            "vertical_mode": _read_optional_scalar_int(data, "vertical_mode"),
         }
         hidden_dims = _read_optional_int_tuple(data, "hidden_dims")
         if hidden_dims is not None:
@@ -143,6 +144,9 @@ def load_population(
             hidden_activations = _read_optional_str_tuple(data, "hidden_activation")
         if hidden_activations is not None:
             meta["hidden_activations"] = hidden_activations
+        observation_layout = _read_optional_str_tuple(data, "observation_layout")
+        if observation_layout is not None:
+            meta["observation_layout"] = observation_layout
 
     return genomes, metrics, meta
 
@@ -224,6 +228,7 @@ def replay_population(
     max_touches: int = 1,
     never_quit: bool = True,
     action_mode: str = "delta",
+    vertical_mode: bool = False,
     pause_between: bool = True,
     sort_by_fitness: bool = True,
     rank_start: int = 1,
@@ -249,11 +254,14 @@ def replay_population(
     print(f"Loaded {pop_size} individuals, genome_size={genome_size}")
     if meta.get("generation") is not None:
         print(f"Checkpoint generation: {meta['generation']}")
+    if meta.get("vertical_mode") is not None:
+        print(f"Checkpoint vertical_mode: {bool(meta['vertical_mode'])}")
 
     env = RacingGameEnviroment(
         map_name=map_name,
         never_quit=never_quit,
         action_mode=action_mode,
+        vertical_mode=vertical_mode,
         max_time=env_max_time,
         max_touches=max_touches,
     )
@@ -275,6 +283,12 @@ def replay_population(
         if file_obs_dim is not None and file_obs_dim != obs_dim:
             print(
                 f"WARNING: checkpoint obs_dim={file_obs_dim} does not match env obs_dim={obs_dim}"
+            )
+        file_vertical_mode = meta.get("vertical_mode")
+        if file_vertical_mode is not None and bool(file_vertical_mode) != bool(vertical_mode):
+            print(
+                "WARNING: checkpoint vertical_mode does not match replay vertical_mode. "
+                "Set Driver.VERTICAL_MODE accordingly."
             )
         if file_act_dim is not None and file_act_dim != act_dim:
             print(
@@ -407,6 +421,7 @@ def drive_model(
     max_touches: int = 1,
     never_quit: bool = True,
     action_mode: str = "target",
+    vertical_mode: bool = False,
     target_steer_deadzone: float = 0.0,
 ) -> None:
     policy, extra = EvolutionPolicy.load(model_file, map_location="cpu")
@@ -414,11 +429,17 @@ def drive_model(
     print(f"Model config: {policy.get_config()}")
     if extra:
         print(f"Model extra: {extra}")
+        if "vertical_mode" in extra and bool(extra["vertical_mode"]) != bool(vertical_mode):
+            print(
+                "WARNING: model vertical_mode does not match replay vertical_mode. "
+                "Set Driver.VERTICAL_MODE accordingly."
+            )
 
     env = RacingGameEnviroment(
         map_name=map_name,
         never_quit=never_quit,
         action_mode=action_mode,
+        vertical_mode=vertical_mode,
         max_time=env_max_time,
         max_touches=max_touches,
     )
@@ -475,6 +496,7 @@ if __name__ == "__main__":
     MAX_TOUCHES = 3
     NEVER_QUIT = True
     ACTION_MODE = "target"
+    VERTICAL_MODE = False
     TARGET_STEER_DEADZONE = 0.05
     PAUSE_BETWEEN = False
 
@@ -493,6 +515,7 @@ if __name__ == "__main__":
             max_touches=MAX_TOUCHES,
             never_quit=NEVER_QUIT,
             action_mode=ACTION_MODE,
+            vertical_mode=VERTICAL_MODE,
             target_steer_deadzone=TARGET_STEER_DEADZONE,
         )
     else:
@@ -505,6 +528,7 @@ if __name__ == "__main__":
             max_touches=MAX_TOUCHES,
             never_quit=NEVER_QUIT,
             action_mode=ACTION_MODE,
+            vertical_mode=VERTICAL_MODE,
             pause_between=PAUSE_BETWEEN,
             sort_by_fitness=SORT_BY_FITNESS,
             rank_start=RANK_START,

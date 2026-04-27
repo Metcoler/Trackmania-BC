@@ -36,6 +36,7 @@ def print_fps(frame: int):
     if dt == 0:
         dt = 0.01
     current_fps = 100 / dt
+    print(current_fps, end="\r", flush=True)
     start_time_fps = time()
 
 
@@ -65,9 +66,19 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
     speed = float(data_dictionary.get("speed", 0.0))
     side_speed = float(data_dictionary.get("side_speed", 0.0))
     game_time = float(data_dictionary.get("time", 0.0))
+    vertical_speed = float(data_dictionary.get("vertical_speed", 0.0))
+    forward_y = float(data_dictionary.get("forward_y", 0.0))
+    support_normal_y = float(data_dictionary.get("support_normal_y", 1.0))
+    cross_slope = float(data_dictionary.get("cross_slope", 0.0))
     instructions_text = format_instruction_window(instructions)
+    ray_modes = list(data_dictionary.get("ray_debug_modes", []))
+    mode_counts = {}
+    for value in ray_modes:
+        mode_counts[value] = mode_counts.get(value, 0) + 1
+    mode_counts_text = ", ".join(f"{key}:{value}" for key, value in sorted(mode_counts.items()))
     summary_line = (
         f"frame={frame:06d}  "
+        f"mode={'3D' if encoder.vertical_mode else '2D'}  "
         f"fps={fps:6.2f}  "
         f"time={game_time:6.2f}s  "
         f"progress={total_progress:6.2f}%  "
@@ -79,27 +90,40 @@ def build_debug_panel(frame: int, data_dictionary, instructions, observation, mi
         f"next_err={next_error:+.3f}  "
         f"instr={instructions_text}"
     )
-    laser_end = Car.NUM_LASERS
-    instruction_end = laser_end + Car.SIGHT_TILES
-    base_end = instruction_end + len(ObservationEncoder.BASE_FEATURE_NAMES)
-    slip_end = base_end + len(ObservationEncoder.WHEEL_SLIP_FEATURE_NAMES)
-    temporal_end = slip_end + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
+    secondary_summary = (
+        f"vertical_speed={vertical_speed:+7.3f}  "
+        f"forward_y={forward_y:+6.3f}  "
+        f"support_ny={support_normal_y:+6.3f}  "
+        f"cross_slope={cross_slope:+6.3f}  "
+        f"ray_modes={mode_counts_text if mode_counts_text else '-'}"
+    )
+    slices = ObservationEncoder.section_slices(vertical_mode=encoder.vertical_mode)
 
     lines = [
         summary_line,
+        secondary_summary,
         "",
-        f"obs lasers   : {format_feature_block(observation[:laser_end])}",
-        f"obs path     : {format_feature_block(observation[laser_end:instruction_end])}",
-        f"obs base     : {format_feature_block(observation[instruction_end:base_end])}",
-        f"obs slip     : {format_feature_block(observation[base_end:slip_end])}",
-        f"obs temporal : {format_feature_block(observation[slip_end:temporal_end])}",
+        f"obs lasers   : {format_feature_block(observation[slices['lasers']])}",
+        f"obs path     : {format_feature_block(observation[slices['path']])}",
+        f"obs base     : {format_feature_block(observation[slices['base']])}",
+        f"obs slip     : {format_feature_block(observation[slices['slip']])}",
+        f"obs temporal : {format_feature_block(observation[slices['temporal']])}",
         "",
-        f"mir lasers   : {format_feature_block(mirrored_observation[:laser_end])}",
-        f"mir path     : {format_feature_block(mirrored_observation[laser_end:instruction_end])}",
-        f"mir base     : {format_feature_block(mirrored_observation[instruction_end:base_end])}",
-        f"mir slip     : {format_feature_block(mirrored_observation[base_end:slip_end])}",
-        f"mir temporal : {format_feature_block(mirrored_observation[slip_end:temporal_end])}",
+        f"mir lasers   : {format_feature_block(mirrored_observation[slices['lasers']])}",
+        f"mir path     : {format_feature_block(mirrored_observation[slices['path']])}",
+        f"mir base     : {format_feature_block(mirrored_observation[slices['base']])}",
+        f"mir slip     : {format_feature_block(mirrored_observation[slices['slip']])}",
+        f"mir temporal : {format_feature_block(mirrored_observation[slices['temporal']])}",
     ]
+    if "vertical" in slices:
+        lines.extend(
+            [
+                f"obs vertical : {format_feature_block(observation[slices['vertical']])}",
+                "",
+                f"mir vertical : {format_feature_block(mirrored_observation[slices['vertical']])}",
+                f"ray elev raw : {format_feature_block(data_dictionary.get('laser_elevation_rates', np.zeros(Car.NUM_LASERS, dtype=np.float32)))}",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -120,12 +144,13 @@ def print_live_debug(frame: int, data_dictionary, instructions, observation, mir
 
 if __name__ == "__main__":  
     #map_name = "AI Training #2"
-    map_name = "AI Training #3"
-    vizualize = True
+    map_name = "loop_test"
+    vizualize = False
+    vertical_mode = False
 
     game_map = Map(map_name)
-    car = Car(game_map)
-    encoder = ObservationEncoder()
+    car = Car(game_map, vertical_mode=vertical_mode)
+    encoder = ObservationEncoder(vertical_mode=vertical_mode)
 
     start_time_fps = time()
     current_fps = 0.0
@@ -140,9 +165,12 @@ if __name__ == "__main__":
     while True:
         distances, instructions, data_dictionary = car.get_data()
         observation = encoder.build_observation(distances, instructions, data_dictionary)
-        mirrored_observation = ObservationEncoder.mirror_observation(observation)
+        mirrored_observation = ObservationEncoder.mirror_observation(
+            observation,
+            vertical_mode=encoder.vertical_mode,
+        )
         print_fps(frame)
-        print_live_debug(frame, data_dictionary, instructions, observation, mirrored_observation)
+        # print_live_debug(frame, data_dictionary, instructions, observation, mirrored_observation)
         frame += 1
         if vizualize and not window_thread.is_alive():
             break
