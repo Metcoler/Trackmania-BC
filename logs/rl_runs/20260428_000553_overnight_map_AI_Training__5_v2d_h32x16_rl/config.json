@@ -1,0 +1,35 @@
+{
+  "trainer": "reinforce_terminal_overnight",
+  "map_name": "AI Training #5",
+  "episodes_to_run": 5000,
+  "env_max_time": 30.0,
+  "max_steps": null,
+  "max_runtime_minutes": null,
+  "checkpoint_every": 50,
+  "obs_dim": 37,
+  "action_mode": "target",
+  "vertical_mode": false,
+  "hidden_dim": [
+    32,
+    16
+  ],
+  "hidden_activation": [
+    "relu",
+    "tanh"
+  ],
+  "learning_rate": 0.0003,
+  "steer_std": 0.35,
+  "steer_std_decay": 1.0,
+  "steer_std_min": 0.08,
+  "entropy_coef": 0.001,
+  "grad_clip_norm": 1.0,
+  "baseline_beta": 0.9,
+  "advantage_clip": 5.0,
+  "max_touches": 1,
+  "start_idle_max_time": 2.0,
+  "prefer_latest_rl_best_model": false,
+  "initial_model_path": null,
+  "initial_model_extra": {},
+  "device": "cpu",
+  "debug": false
+}

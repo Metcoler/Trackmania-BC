@@ -1,0 +1,32 @@
+{
+  "algorithm": "SAC",
+  "map_name": "AI Training #5",
+  "episodes_to_run": 50,
+  "total_timesteps": 300000,
+  "env_max_time": 30.0,
+  "reward_mode": "hybrid_progress_terminal_fitness",
+  "action_layout": "throttle_steer",
+  "vertical_mode": false,
+  "progress_reward_interval_steps": 100,
+  "progress_delta_scale": 0.1,
+  "terminal_fitness_scale": 1000000.0,
+  "train_freq": [
+    1,
+    "episode"
+  ],
+  "gradient_steps": 512,
+  "learning_rate": 0.0003,
+  "buffer_size": 300000,
+  "learning_starts": 2000,
+  "batch_size": 256,
+  "gamma": 0.995,
+  "tau": 0.005,
+  "ent_coef": "auto",
+  "policy_net_arch": [
+    128,
+    128
+  ],
+  "action_space": "Box(-1.0, 1.0, (2,), float32)",
+  "observation_space": "Box([ 0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0. -1. -1. -1.\n -1. -1. -1. -1. -1. -1.  0.  0.  0.  0.  0. -1. -1. -1. -1. -1. -1. -1.\n -1.], [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.\n 3. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.], (37,), float32)",
+  "device": "cpu"
+}

@@ -3,8 +3,6 @@ RoadTechCurve1;28,9,26;North
 RoadTechCurve2;28,9,28;North
 RoadTechCurve3;28,9,31;North
 RoadTechCurve4;28,9,34;North
-RoadTechStart;28,9,20;North
-RoadTechFinish;28,9,21;North
 RoadDirtStraight;24,9,24;North
 RoadDirtCurve1;24,9,26;North
 RoadDirtCurve2;24,9,28;North
@@ -35,3 +33,10 @@ PlatformDirtSlopeBase;22,9,17;North
 PlatformDirtSlope2Base;24,9,20;North
 RoadTechSlopeBase2;29,9,20;North
 RoadTechSlopeBase;29,9,22;North
+RoadTechStraight;27,9,18;North
+RoadDirtStraight;27,9,19;North
+PlatformIceBase;27,9,21;North
+PlatformGrassBase;27,9,20;North
+PlatformPlasticBase;27,9,22;North
+RoadTechFinish;27,9,23;North
+RoadTechStart;27,9,17;North

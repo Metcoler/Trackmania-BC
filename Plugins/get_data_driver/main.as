@@ -256,6 +256,31 @@ void Main()
 			append_float(buf, state.RLSlipCoef);
 			append_float(buf, state.RRSlipCoef);
 
+			// Per-wheel ground contact and surface diagnostics.
+			// These are not part of the NN observation yet; Python uses them for live
+			// visualization so we can calibrate compact traction features later.
+			append_float(buf, state.IsGroundContact ? 1.0f : 0.0f);
+			append_float(buf, state.IsGroundContact ? 1.0f : 0.0f);
+			append_float(buf, state.IsGroundContact ? 1.0f : 0.0f);
+			append_float(buf, state.IsGroundContact ? 1.0f : 0.0f);
+
+			append_float(buf, float(int(state.FLGroundContactMaterial)));
+			append_float(buf, float(int(state.FRGroundContactMaterial)));
+			append_float(buf, float(int(state.RLGroundContactMaterial)));
+			append_float(buf, float(int(state.RRGroundContactMaterial)));
+
+			append_float(buf, state.FLIcing01);
+			append_float(buf, state.FRIcing01);
+			append_float(buf, state.RLIcing01);
+			append_float(buf, state.RRIcing01);
+
+			append_float(buf, VehicleState::GetWheelDirt(state, 0));
+			append_float(buf, VehicleState::GetWheelDirt(state, 1));
+			append_float(buf, VehicleState::GetWheelDirt(state, 2));
+			append_float(buf, VehicleState::GetWheelDirt(state, 3));
+
+			append_float(buf, state.WetnessValue01);
+
 
 
 

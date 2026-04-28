@@ -80,8 +80,8 @@ class Individual:
 
 
         # If player didn't reach 20% don't consider time
-        # if progress < 20:
-        #   return (term, progress, 0, 0)
+        if progress < 20:
+           return (term, progress, 0, 0)
         
         # If agent didn't finish, don't consider min distance
         term = 0

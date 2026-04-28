@@ -15,7 +15,7 @@ class Car:
     NUM_LASERS = 15
     ANGLE = 180
     SIGHT_TILES = 5
-    PACKET_FLOAT_COUNT = 20
+    PACKET_FLOAT_COUNT = 37
     PACKET_SIZE = PACKET_FLOAT_COUNT * 4
     LASER_MAX_DISTANCE = 160.0
     SURFACE_STEP_SIZE = 5.0
@@ -580,7 +580,7 @@ class Car:
         if len(packet) != Car.PACKET_SIZE:
             raise ValueError(f"Invalid packet size: {len(packet)} != {Car.PACKET_SIZE}")
 
-        values = struct.unpack("<20f", packet)
+        values = struct.unpack(f"<{Car.PACKET_FLOAT_COUNT}f", packet)
         keys = [
             "speed",
             "side_speed",
@@ -602,6 +602,23 @@ class Car:
             "slip_fr",
             "slip_rl",
             "slip_rr",
+            "ground_contact_fl",
+            "ground_contact_fr",
+            "ground_contact_rl",
+            "ground_contact_rr",
+            "ground_material_fl",
+            "ground_material_fr",
+            "ground_material_rl",
+            "ground_material_rr",
+            "icing_fl",
+            "icing_fr",
+            "icing_rl",
+            "icing_rr",
+            "dirt_fl",
+            "dirt_fr",
+            "dirt_rl",
+            "dirt_rr",
+            "wetness",
         ]
         data = dict(zip(keys, values))
         data["y"] += 0.2
