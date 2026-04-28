@@ -1,0 +1,11 @@
+RoadTechStart;26,9,20;North
+RoadTechStraight;26,9,21;North
+RoadTechCurve1;26,9,22;East
+PlatformDirtCurve2;24,9,22;West
+PlatformDirtCurve1;24,9,24;South
+PlatformGrassCurve2;25,9,24;North
+PlatformGrassBase;26,9,26;North
+PlatformPlasticCurve2;25,9,27;East
+PlatformIceBase;24,9,28;East
+PlatformIceBase;23,9,28;East
+RoadTechFinish;22,9,28;East

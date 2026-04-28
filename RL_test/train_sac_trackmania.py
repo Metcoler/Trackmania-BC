@@ -23,19 +23,24 @@ from Enviroment import RacingGameEnviroment
 from Individual import Individual
 
 
-MAP_NAME = "AI Training #5"
+MAP_NAME = "small_map_test_2"
 EPISODES_TO_RUN = 5000
 TOTAL_TIMESTEPS = 20_000_000
-MAX_RUNTIME_HOURS = 8.0
+MAX_RUNTIME_HOURS = 0.5
 ENV_MAX_TIME = 30.0
 CHECKPOINT_EVERY_EPISODES = 50
 
 # Hybrid reward: sparse progress deltas during the run plus a dominant terminal
 # fitness reward using Individual.compute_scalar_fitness_for.
-REWARD_MODE = "hybrid_progress_terminal_fitness"
+REWARD_MODE = "terminal_fitness"
 PROGRESS_REWARD_INTERVAL_STEPS = 100
 PROGRESS_DELTA_SCALE = 0.10
 TERMINAL_FITNESS_SCALE = 1_000_000.0
+INITIAL_MODEL_PATH = (
+    "logs/sb3_runs/"
+    "20260428_220423_sac_map_surface_test_2d_lidar_terminal_fitness_gas_brake_steer/"
+    "best_model.zip"
+)
 
 ACTION_LAYOUT = "gas_brake_steer"  # gas_steer / gas_brake_steer / throttle_steer / target_3d
 VERTICAL_MODE = False
@@ -452,9 +457,16 @@ def activation_fn_from_name(name: str):
     raise ValueError("activation name must be relu, tanh, elu, or leaky_relu.")
 
 
-def build_run_dir(base_dir: str, map_name: str, reward_mode: str, action_layout: str) -> Path:
+def build_run_dir(
+    base_dir: str,
+    map_name: str,
+    reward_mode: str,
+    action_layout: str,
+    vertical_mode: bool,
+) -> Path:
+    lidar_mode = "3d_lidar" if vertical_mode else "2d_lidar"
     run_name = (
-        f"{timestamp()}_sac_map_{map_name}_{reward_mode}_{action_layout}"
+        f"{timestamp()}_sac_map_{map_name}_{lidar_mode}_{reward_mode}_{action_layout}"
     )
     run_dir = Path(base_dir) / sanitize_name(run_name)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -488,6 +500,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--progress-reward-interval-steps", type=int, default=PROGRESS_REWARD_INTERVAL_STEPS)
     parser.add_argument("--progress-delta-scale", type=float, default=PROGRESS_DELTA_SCALE)
     parser.add_argument("--terminal-fitness-scale", type=float, default=TERMINAL_FITNESS_SCALE)
+    parser.add_argument("--initial-model-path", default=INITIAL_MODEL_PATH)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--import-check", action="store_true")
@@ -509,6 +522,7 @@ def main() -> None:
         map_name=MAP_NAME,
         reward_mode=args.reward_mode,
         action_layout=args.action_layout,
+        vertical_mode=VERTICAL_MODE,
     )
     monitor_path = str(run_dir / "monitor.csv")
     raw_env = TrackmaniaSB3Env(
@@ -528,6 +542,7 @@ def main() -> None:
     config = dict(
         algorithm="SAC",
         map_name=MAP_NAME,
+        initial_model_path=args.initial_model_path,
         episodes_to_run=int(args.episodes),
         total_timesteps=int(args.total_timesteps),
         max_runtime_hours=float(args.max_runtime_hours),
@@ -558,7 +573,9 @@ def main() -> None:
 
     print("\n[SB3 SAC] Prepared Trackmania SAC experiment")
     print(f"[SB3 SAC] run_dir={run_dir}")
+    print(f"[SB3 SAC] map_name={MAP_NAME} lidar_mode={'3D' if VERTICAL_MODE else '2D'}")
     print(f"[SB3 SAC] reward_mode={args.reward_mode} action_layout={args.action_layout}")
+    print(f"[SB3 SAC] initial_model_path={args.initial_model_path or 'None'}")
     print(
         f"[SB3 SAC] max_runtime_hours={float(args.max_runtime_hours):.2f} "
         f"episodes_cap={int(args.episodes)} total_timesteps_cap={int(args.total_timesteps)}"
@@ -572,23 +589,50 @@ def main() -> None:
         net_arch=net_arch,
         activation_fn=activation_fn_from_name(args.activation_fn),
     )
-    model = SAC(
-        "MlpPolicy",
-        env,
-        learning_rate=SAC_LEARNING_RATE,
-        buffer_size=SAC_BUFFER_SIZE,
-        learning_starts=SAC_LEARNING_STARTS,
-        batch_size=SAC_BATCH_SIZE,
-        tau=SAC_TAU,
-        gamma=SAC_GAMMA,
-        train_freq=SAC_TRAIN_FREQ,
-        gradient_steps=SAC_GRADIENT_STEPS,
-        ent_coef=SAC_ENT_COEF,
-        policy_kwargs=policy_kwargs,
-        verbose=1,
-        tensorboard_log=str(run_dir / "tensorboard"),
-        device=args.device,
-    )
+    initial_model_path = None
+    if args.initial_model_path:
+        initial_model_path = Path(args.initial_model_path)
+        if not initial_model_path.is_absolute():
+            initial_model_path = PROJECT_ROOT / initial_model_path
+        if not initial_model_path.exists():
+            raise FileNotFoundError(initial_model_path)
+
+    if initial_model_path is not None:
+        print(f"[SB3 SAC] Loading initial model: {initial_model_path}")
+        model = SAC.load(
+            initial_model_path,
+            env=env,
+            learning_rate=SAC_LEARNING_RATE,
+            buffer_size=SAC_BUFFER_SIZE,
+            learning_starts=SAC_LEARNING_STARTS,
+            batch_size=SAC_BATCH_SIZE,
+            tau=SAC_TAU,
+            gamma=SAC_GAMMA,
+            train_freq=SAC_TRAIN_FREQ,
+            gradient_steps=SAC_GRADIENT_STEPS,
+            ent_coef=SAC_ENT_COEF,
+            verbose=1,
+            tensorboard_log=str(run_dir / "tensorboard"),
+            device=args.device,
+        )
+    else:
+        model = SAC(
+            "MlpPolicy",
+            env,
+            learning_rate=SAC_LEARNING_RATE,
+            buffer_size=SAC_BUFFER_SIZE,
+            learning_starts=SAC_LEARNING_STARTS,
+            batch_size=SAC_BATCH_SIZE,
+            tau=SAC_TAU,
+            gamma=SAC_GAMMA,
+            train_freq=SAC_TRAIN_FREQ,
+            gradient_steps=SAC_GRADIENT_STEPS,
+            ent_coef=SAC_ENT_COEF,
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            tensorboard_log=str(run_dir / "tensorboard"),
+            device=args.device,
+        )
     episode_callback = EpisodeMetricsCallback(
         run_dir=run_dir,
         checkpoint_every_episodes=args.checkpoint_every_episodes,

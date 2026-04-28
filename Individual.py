@@ -83,8 +83,6 @@ class Individual:
         if progress < 20:
            return (term, progress, 0, 0)
         
-        # If agent didn't finish, don't consider min distance
-        term = 0
         if term <= 0:
             return (term, progress, -t, 0)
         

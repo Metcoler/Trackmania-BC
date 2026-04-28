@@ -85,6 +85,16 @@ EPLUG_SURFACE_MATERIAL_NAMES = {
     80: "XXX_Null",
 }
 
+SURFACE_TRACTION_BY_PREFIX = {
+    "RoadTech": 1.00,
+    "RoadDirt": 0.50,
+    "PlatformDirt": 0.50,
+    "PlatformGrass": 0.70,
+    "PlatformPlastic": 0.75,
+    "PlatformIce": 0.05,
+    "PlatformSnow": 0.15,
+}
+
 
 def surface_material_name(material_id: float | int | None) -> str:
     if material_id is None:
@@ -95,3 +105,8 @@ def surface_material_name(material_id: float | int | None) -> str:
         return "Unknown"
     return EPLUG_SURFACE_MATERIAL_NAMES.get(numeric_id, f"Unknown({numeric_id})")
 
+
+def traction_for_surface_prefix(surface_prefix: str | None) -> float:
+    if surface_prefix is None:
+        return 1.0
+    return float(SURFACE_TRACTION_BY_PREFIX.get(str(surface_prefix), 1.0))

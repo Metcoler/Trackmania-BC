@@ -57,31 +57,112 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
     expected_obs_dim = encoder.obs_dim
     base_obs_dim = encoder.base_obs_dim()
     slip_obs_dim = encoder.slip_obs_dim()
+    surface_obs_dim = encoder.surface_obs_dim()
+    height_obs_dim = encoder.height_obs_dim()
+    old_slip_temporal_obs_dim = slip_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
+    old_surface_temporal_obs_dim = surface_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
     with np.load(path) as data:
         observations = np.asarray(data["observations"], dtype=np.float32)
         if observations.ndim != 2:
             raise ValueError(f"Expected 2D observations in {path}, got shape {observations.shape}.")
         if observations.shape[1] == expected_obs_dim:
             pass
-        elif observations.shape[1] >= slip_obs_dim and observations.shape[1] < expected_obs_dim:
+        elif observations.shape[1] == old_surface_temporal_obs_dim:
+            # Historical surface-aware observations had temporal features immediately
+            # after surface instructions. Insert flat height defaults before temporal.
+            observations = np.concatenate(
+                [
+                    observations[:, :surface_obs_dim],
+                    np.zeros((observations.shape[0], height_obs_dim - surface_obs_dim), dtype=np.float32),
+                    observations[:, surface_obs_dim:old_surface_temporal_obs_dim],
+                ],
+                axis=1,
+            )
+        elif observations.shape[1] == old_slip_temporal_obs_dim:
+            # Historical full observations had temporal features immediately after
+            # wheel slip. Insert asphalt-like surface and flat height defaults before
+            # temporal data.
+            observations = np.concatenate(
+                [
+                    observations[:, :slip_obs_dim],
+                    np.ones((observations.shape[0], surface_obs_dim - slip_obs_dim), dtype=np.float32),
+                    np.zeros((observations.shape[0], height_obs_dim - surface_obs_dim), dtype=np.float32),
+                    observations[:, slip_obs_dim:old_slip_temporal_obs_dim],
+                ],
+                axis=1,
+            )
+        elif observations.shape[1] >= height_obs_dim and observations.shape[1] < expected_obs_dim:
+            observations = observations[:, :height_obs_dim]
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+        elif observations.shape[1] >= surface_obs_dim and observations.shape[1] < height_obs_dim:
+            observations = observations[:, :surface_obs_dim]
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+        elif observations.shape[1] >= slip_obs_dim and observations.shape[1] < surface_obs_dim:
             # Current 33-dim datasets already contain slip features but not the newer
-            # temporal summary block. Preserve the canonical 33-dim prefix and pad
-            # the temporal features with zeros.
+            # surface/temporal blocks. Preserve the canonical slip prefix, pad
+            # surface traction with asphalt defaults, and pad temporal features
+            # with zeros.
             observations = observations[:, :slip_obs_dim]
             observations = np.pad(
                 observations,
-                ((0, 0), (0, expected_obs_dim - slip_obs_dim)),
+                ((0, 0), (0, surface_obs_dim - slip_obs_dim)),
+                mode="constant",
+                constant_values=1.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
                 mode="constant",
                 constant_values=0.0,
             )
         elif observations.shape[1] >= base_obs_dim and observations.shape[1] < slip_obs_dim:
             # Historical datasets used the canonical 29-dim prefix and, in some runs,
             # appended previous-action leakage after that prefix. Keep only the safe
-            # canonical prefix, then pad all newer features with zeros.
+            # canonical prefix, then pad all newer features.
             observations = observations[:, :base_obs_dim]
             observations = np.pad(
                 observations,
-                ((0, 0), (0, expected_obs_dim - base_obs_dim)),
+                ((0, 0), (0, slip_obs_dim - base_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, surface_obs_dim - slip_obs_dim)),
+                mode="constant",
+                constant_values=1.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, height_obs_dim - surface_obs_dim)),
+                mode="constant",
+                constant_values=0.0,
+            )
+            observations = np.pad(
+                observations,
+                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
                 mode="constant",
                 constant_values=0.0,
             )

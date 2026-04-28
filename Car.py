@@ -20,9 +20,11 @@ class Car:
     LASER_MAX_DISTANCE = 160.0
     SURFACE_STEP_SIZE = 5.0
     SURFACE_PROBE_HEIGHT = 1.0
-    SURFACE_RAY_LIFT = 1.0
+    SURFACE_RAY_LIFT = 0.2
     SURFACE_TRAVERSAL_EPS = 1e-4
     SURFACE_WALL_CAST_EPS = 1e-4
+    VERTICAL_LOOKAHEAD_TILES = SIGHT_TILES + 1
+    FLAT_SURFACE_NORMAL_Y_THRESHOLD = 0.999
 
     @staticmethod
     def _normalize(vector) -> np.ndarray | None:
@@ -93,6 +95,7 @@ class Car:
         self.surface_support_normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
         self.surface_support_face_index = -1
         self.surface_forward = np.array(self.direction_world, dtype=np.float32)
+        self.surface_support_block = None
         self.support_valid = False
         self.ray_paths = [[np.array(self.position, dtype=np.float32)] for _ in range(Car.NUM_LASERS)]
         self.ray_debug_modes = ["flat_open" for _ in range(Car.NUM_LASERS)]
@@ -114,6 +117,8 @@ class Car:
         self.intersections = [[0, 0, 0] for _ in range(Car.NUM_LASERS)]
         self.next_tiles = [game_map.start_logical_position for _ in range(Car.SIGHT_TILES)]
         self.next_points = list(map(Map.tile_coordinate_to_point, self.next_tiles))
+        self.next_surface_instructions = [1.0 for _ in range(Car.SIGHT_TILES)]
+        self.next_height_instructions = [0.0 for _ in range(Car.SIGHT_TILES)]
 
         self.wall_ray_finder = trimesh.ray.ray_triangle.RayMeshIntersector(
             self.walls_mesh
@@ -190,11 +195,12 @@ class Car:
         ray_directions = np.asarray(ray_directions, dtype=np.float32)
         if ray_origins.size == 0:
             return []
+        ray_count = int(ray_origins.shape[0])
         hits = intersector.intersects_location(
             ray_origins=ray_origins,
             ray_directions=ray_directions,
             multiple_hits=False,
-            parallel=True,
+            parallel=ray_count > 1,
         )
         return self._collect_nearest_hits(
             hit_positions=hits[0],
@@ -276,26 +282,31 @@ class Car:
         return supports
 
     def _update_surface_state(self):
-        fallback_normal = self.surface_support_normal if self.support_valid else np.array([0.0, 1.0, 0.0], dtype=np.float32)
-        support = self._find_surface_support(
-            target_points=np.asarray([self.position], dtype=np.float32),
-            reference_normals=np.asarray([fallback_normal], dtype=np.float32),
-        )[0]
-        if support is None:
+        support_block = self.game_map.find_block_for_point(
+            self.position,
+            fallback_block=self.surface_support_block,
+        )
+        if support_block is None:
             self.support_valid = False
+            self.surface_support_block = None
             self.surface_support_point = np.array(self.position, dtype=np.float32)
             self.surface_support_normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
             self.surface_support_face_index = -1
+            surface_forward = self._normalize_xz(self.direction_world)
         else:
             self.support_valid = True
-            self.surface_support_point = np.asarray(support["point"], dtype=np.float32)
-            self.surface_support_normal = np.asarray(support["normal"], dtype=np.float32)
-            self.surface_support_face_index = int(support["face_index"])
+            self.surface_support_block = support_block
+            self.surface_support_point = support_block.road_point_at(
+                self.position[0],
+                self.position[2],
+                lift=0.0,
+            )
+            self.surface_support_normal = np.asarray(support_block.road_normal, dtype=np.float32)
+            self.surface_support_face_index = -1
+            surface_forward = support_block.road_direction_for_xz(
+                [self.direction_world[0], self.direction_world[2]],
+            )
 
-        surface_forward = self._project_onto_plane(
-            self.direction_world,
-            self.surface_support_normal,
-        )
         if surface_forward is None:
             surface_forward = self._normalize_xz(self.direction_world)
         if surface_forward is None:
@@ -333,6 +344,105 @@ class Car:
                 face_index=int(hit["face_index"]),
             )
         return None
+
+    def _cast_block_wall_hits(self, block, origins, directions, max_distances):
+        origins = np.asarray(origins, dtype=np.float32)
+        directions = np.asarray(directions, dtype=np.float32)
+        max_distances = np.asarray(max_distances, dtype=np.float32).reshape(-1)
+        if origins.ndim == 1:
+            origins = origins.reshape(1, 3)
+        if directions.ndim == 1:
+            directions = directions.reshape(1, 3)
+
+        hit_results = [None] * len(origins)
+        if block is None or len(origins) == 0:
+            return hit_results
+        intersector = block.get_sensor_wall_ray_finder()
+        if intersector is None:
+            return hit_results
+
+        norms = np.linalg.norm(directions, axis=1)
+        valid_mask = (max_distances > 1e-6) & (norms > 1e-6)
+        if not np.any(valid_mask):
+            return hit_results
+
+        valid_indices = np.flatnonzero(valid_mask)
+        valid_directions = directions[valid_indices] / norms[valid_indices, None]
+        cast_origins = origins[valid_indices] + valid_directions * self.SURFACE_WALL_CAST_EPS
+        hit = self._batch_ray_hits(
+            intersector,
+            cast_origins,
+            valid_directions,
+        )
+
+        for local_index, ray_hit in zip(valid_indices, hit):
+            if ray_hit is None:
+                continue
+            distance = float(ray_hit["distance"]) + self.SURFACE_WALL_CAST_EPS
+            if distance <= (float(max_distances[int(local_index)]) + self.SURFACE_TRAVERSAL_EPS):
+                hit_results[int(local_index)] = dict(
+                    position=np.asarray(ray_hit["position"], dtype=np.float32),
+                    distance=distance,
+                    face_index=int(ray_hit["face_index"]),
+                )
+        return hit_results
+
+    def _cast_block_wall_hit(self, block, origin, direction, max_distance: float):
+        return self._cast_block_wall_hits(
+            block,
+            np.asarray([origin], dtype=np.float32),
+            np.asarray([direction], dtype=np.float32),
+            np.asarray([max_distance], dtype=np.float32),
+        )[0]
+
+    @staticmethod
+    def _distance_to_next_xz_cell_boundary(point_xz, direction_xz, cell_x: int, cell_z: int) -> float:
+        point_xz = np.asarray(point_xz, dtype=np.float32)
+        direction_xz = np.asarray(direction_xz, dtype=np.float32)
+        distances = []
+
+        if direction_xz[0] > 1e-6:
+            boundary_x = (int(cell_x) + 1) * MAP_BLOCK_SIZE
+            distances.append((boundary_x - float(point_xz[0])) / float(direction_xz[0]))
+        elif direction_xz[0] < -1e-6:
+            boundary_x = int(cell_x) * MAP_BLOCK_SIZE
+            distances.append((boundary_x - float(point_xz[0])) / float(direction_xz[0]))
+
+        if direction_xz[1] > 1e-6:
+            boundary_z = (int(cell_z) + 1) * MAP_BLOCK_SIZE
+            distances.append((boundary_z - float(point_xz[1])) / float(direction_xz[1]))
+        elif direction_xz[1] < -1e-6:
+            boundary_z = int(cell_z) * MAP_BLOCK_SIZE
+            distances.append((boundary_z - float(point_xz[1])) / float(direction_xz[1]))
+
+        positive_distances = [float(distance) for distance in distances if distance > 1e-5]
+        if not positive_distances:
+            return float("inf")
+        return min(positive_distances)
+
+    def _current_logical_tile(self) -> np.ndarray:
+        x = int(np.floor(float(self.position[0]) / MAP_BLOCK_SIZE))
+        z = int(np.floor(float(self.position[2]) / MAP_BLOCK_SIZE))
+
+        support_block = self.game_map.find_block_for_point(
+            self.position,
+            fallback_block=self.surface_support_block,
+        )
+        if support_block is not None:
+            road_y = support_block.road_height_at(float(self.position[0]), float(self.position[2]))
+        else:
+            road_y = float(self.position[1])
+
+        level_step = MAP_BLOCK_SIZE // 4
+        y_estimate = int(round((road_y - MAP_GROUND_LEVEL - 2.0) / level_step))
+        candidates = [
+            np.asarray(tile, dtype=np.int32)
+            for tile in self.game_map.path_tiles
+            if int(tile[0]) == x and int(tile[2]) == z
+        ]
+        if candidates:
+            return min(candidates, key=lambda tile: abs(int(tile[1]) - y_estimate))
+        return np.array([x, y_estimate, z], dtype=np.int32)
 
     def _face_tangent_direction(self, face_index: int, direction) -> np.ndarray | None:
         if face_index < 0 or face_index >= len(self.road_traversal_mesh.faces):
@@ -499,9 +609,13 @@ class Car:
         try:
             self.next_tiles = self.game_map.path_tiles[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
             self.next_instructions = self.game_map.path_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
+            self.next_surface_instructions = self.game_map.path_surface_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
+            self.next_height_instructions = self.game_map.path_height_instructions[self.path_tile_index:self.path_tile_index + Car.SIGHT_TILES]
         except IndexError:
             self.next_tiles = []
             self.next_instructions = []
+            self.next_surface_instructions = []
+            self.next_height_instructions = []
         
         if len(self.next_tiles) == 0:
             self.next_tiles = [self.game_map.end_logical_position]
@@ -509,12 +623,32 @@ class Car:
         if len(self.next_instructions) == 0:
             self.next_instructions = [0]
 
+        if len(self.next_surface_instructions) == 0:
+            self.next_surface_instructions = [1.0]
+
+        if len(self.next_height_instructions) == 0:
+            self.next_height_instructions = [0.0]
+
         if len(self.next_tiles) < Car.SIGHT_TILES:
             self.next_tiles += [self.next_tiles[-1] for _ in range(Car.SIGHT_TILES - len(self.next_tiles))]
         
         if len(self.next_instructions) < Car.SIGHT_TILES:
             self.next_instructions += [self.next_instructions[-1] for _ in range(Car.SIGHT_TILES - len(self.next_instructions))]
 
+        if len(self.next_surface_instructions) < Car.SIGHT_TILES:
+            self.next_surface_instructions += [
+                self.next_surface_instructions[-1]
+                for _ in range(Car.SIGHT_TILES - len(self.next_surface_instructions))
+            ]
+
+        if len(self.next_height_instructions) < Car.SIGHT_TILES:
+            self.next_height_instructions += [
+                self.next_height_instructions[-1]
+                for _ in range(Car.SIGHT_TILES - len(self.next_height_instructions))
+            ]
+
+        data["next_surface_instructions"] = list(self.next_surface_instructions)
+        data["next_height_instructions"] = list(self.next_height_instructions)
         self.next_points = list(map(lambda tile: Map.tile_coordinate_to_point(tile, dy=2), self.next_tiles))
         current_segment_vector = self.next_points[1] - self.next_points[0]
         next_segment_vector = self.next_points[2] - self.next_points[1]
@@ -549,6 +683,14 @@ class Car:
         data["laser_surface_lengths"] = self.laser_surface_lengths.copy()
         data["laser_elevation_deltas"] = self.laser_elevation_deltas.copy()
         data["ray_debug_modes"] = list(self.ray_debug_modes)
+        if self.vertical_mode:
+            data["vertical_lidar_mode"] = (
+                "grid"
+                if any(str(mode).startswith("grid") for mode in self.ray_debug_modes)
+                else "flat"
+            )
+        else:
+            data["vertical_lidar_mode"] = "off"
         return self.distances, self.next_instructions, data
 
     
@@ -556,21 +698,20 @@ class Car:
     def update_path_state(self):
         # Check if the car has reached the next path tile
 
-        current_tile = self.position // 32
-        current_tile += np.array([0, 9, 0])
-        if all(current_tile == self.game_map.path_tiles[self.path_tile_index]):
+        current_tile = self._current_logical_tile()
+        if np.array_equal(current_tile, self.game_map.path_tiles[self.path_tile_index]):
             return 0
 
-        if self.path_tile_index < len(self.game_map.path_tiles) - 1 and all(current_tile == self.game_map.path_tiles[self.path_tile_index + 1]):
+        if self.path_tile_index < len(self.game_map.path_tiles) - 1 and np.array_equal(current_tile, self.game_map.path_tiles[self.path_tile_index + 1]):
             self.path_tile_index += 1
             return 1
             
-        if self.path_tile_index > 0 and all(current_tile == self.game_map.path_tiles[self.path_tile_index - 1]):
+        if self.path_tile_index > 0 and np.array_equal(current_tile, self.game_map.path_tiles[self.path_tile_index - 1]):
             self.path_tile_index -= 1
             return -1
         
         # Probably reset of the car
-        if all(current_tile == self.game_map.start_logical_position):
+        if np.array_equal(current_tile, self.game_map.start_logical_position):
             self.path_tile_index = 0
             return 0
         return 0
@@ -632,6 +773,11 @@ class Car:
             "surface_wall_fallback": [255, 128, 64],
             "surface_open": [0, 200, 255],
             "surface_probe_miss": [255, 220, 64],
+            "grid_wall": [255, 64, 64],
+            "grid_open": [0, 200, 255],
+            "grid_gap": [255, 220, 64],
+            "grid_no_support": [255, 128, 64],
+            "grid_blocked_transition": [255, 160, 0],
         }
 
         for i, ray_end in enumerate(self.intersections):
@@ -857,9 +1003,243 @@ class Car:
                     np.asarray(final_point, dtype=np.float32),
                 ]
 
+    def _vertical_lidar_needed(self) -> bool:
+        if not self.support_valid or self.surface_support_block is None:
+            return False
+        if float(self.surface_support_normal[1]) < self.FLAT_SURFACE_NORMAL_Y_THRESHOLD:
+            return True
+        if int(self.surface_support_block.logical_position[1]) != int(self.game_map.start_logical_position[1]):
+            return True
+
+        current_cell = self.game_map.point_to_xz_cell(self.position)
+        if self.game_map.cell_has_stacked_layers(*current_cell):
+            return True
+
+        horizon_end = min(
+            len(self.game_map.path_tiles),
+            self.path_tile_index + self.VERTICAL_LOOKAHEAD_TILES + 1,
+        )
+        lookahead_tiles = self.game_map.path_tiles[self.path_tile_index:horizon_end]
+        if len(lookahead_tiles) < 2:
+            return False
+        if any(self.game_map.cell_has_stacked_layers(int(tile[0]), int(tile[2])) for tile in lookahead_tiles):
+            return True
+        first_y = int(lookahead_tiles[0][1])
+        return any(int(tile[1]) != first_y for tile in lookahead_tiles[1:])
+
+    def _find_block_grid_intersections(self):
+        if not self.support_valid or self.surface_support_block is None:
+            self._find_flat_intersections()
+            self.ray_debug_modes = ["grid_no_support" for _ in range(Car.NUM_LASERS)]
+            return
+
+        start_block = self.surface_support_block
+        start_surface = np.asarray(self.surface_support_point, dtype=np.float32)
+        start_lifted = start_block.road_point_at(
+            start_surface[0],
+            start_surface[2],
+            lift=self.surface_ray_lift,
+        )
+        max_grid_hops = max(
+            Car.SIGHT_TILES * 4,
+            int(np.ceil(Car.LASER_MAX_DISTANCE / MAP_BLOCK_SIZE)) * 4,
+        )
+
+        ray_origin = np.asarray(self.position, dtype=np.float32)
+        current_xzs = [
+            np.array([start_surface[0], start_surface[2]], dtype=np.float32)
+            for _ in range(Car.NUM_LASERS)
+        ]
+        current_blocks = [start_block for _ in range(Car.NUM_LASERS)]
+        total_distances = np.zeros(Car.NUM_LASERS, dtype=np.float32)
+        final_points = [np.asarray(start_lifted, dtype=np.float32) for _ in range(Car.NUM_LASERS)]
+        final_modes = ["grid_open" for _ in range(Car.NUM_LASERS)]
+        ray_paths = [
+            [ray_origin, np.asarray(start_lifted, dtype=np.float32)]
+            for _ in range(Car.NUM_LASERS)
+        ]
+        direction_xzs: list[np.ndarray | None] = []
+        active = np.ones(Car.NUM_LASERS, dtype=bool)
+
+        for idx in range(Car.NUM_LASERS):
+            direction_xz_3d = self._normalize_xz(self.rays_directions[idx])
+            if direction_xz_3d is None:
+                active[idx] = False
+                final_modes[idx] = "grid_gap"
+                total_distances[idx] = 0.0
+                direction_xzs.append(None)
+                continue
+            direction_xzs.append(np.array([direction_xz_3d[0], direction_xz_3d[2]], dtype=np.float32))
+
+        for _ in range(max_grid_hops):
+            if not bool(np.any(active)):
+                break
+
+            segment_records: list[dict] = []
+            for idx in np.flatnonzero(active):
+                idx = int(idx)
+                remaining = Car.LASER_MAX_DISTANCE - float(total_distances[idx])
+                if remaining <= self.SURFACE_TRAVERSAL_EPS:
+                    final_modes[idx] = "grid_open"
+                    total_distances[idx] = Car.LASER_MAX_DISTANCE
+                    active[idx] = False
+                    continue
+
+                current_block = current_blocks[idx]
+                direction_xz = direction_xzs[idx]
+                if current_block is None or direction_xz is None:
+                    final_modes[idx] = "grid_gap"
+                    active[idx] = False
+                    continue
+
+                current_xz = current_xzs[idx]
+                cell_x = int(np.floor(float(current_xz[0]) / MAP_BLOCK_SIZE))
+                cell_z = int(np.floor(float(current_xz[1]) / MAP_BLOCK_SIZE))
+                boundary_distance = self._distance_to_next_xz_cell_boundary(
+                    current_xz,
+                    direction_xz,
+                    cell_x,
+                    cell_z,
+                )
+                if not np.isfinite(boundary_distance):
+                    boundary_distance = Car.LASER_MAX_DISTANCE
+
+                horizontal_segment = max(float(boundary_distance), self.SURFACE_TRAVERSAL_EPS)
+                segment_end_xz = current_xz + direction_xz * horizontal_segment
+                segment_start = current_block.road_point_at(
+                    current_xz[0],
+                    current_xz[1],
+                    lift=self.surface_ray_lift,
+                )
+                segment_end = current_block.road_point_at(
+                    segment_end_xz[0],
+                    segment_end_xz[1],
+                    lift=self.surface_ray_lift,
+                )
+                if np.linalg.norm(ray_paths[idx][-1] - segment_start) > 1e-4:
+                    ray_paths[idx].append(np.asarray(segment_start, dtype=np.float32))
+
+                segment_vector = np.asarray(segment_end - segment_start, dtype=np.float32)
+                segment_length = float(np.linalg.norm(segment_vector))
+                if segment_length <= self.SURFACE_TRAVERSAL_EPS:
+                    current_xzs[idx] = current_xz + direction_xz * self.SURFACE_TRAVERSAL_EPS
+                    continue
+
+                reached_distance_limit = False
+                if segment_length > remaining:
+                    scale = float(remaining / segment_length)
+                    segment_end = segment_start + segment_vector * scale
+                    segment_end_xz = current_xz + (segment_end_xz - current_xz) * scale
+                    segment_vector = np.asarray(segment_end - segment_start, dtype=np.float32)
+                    segment_length = float(remaining)
+                    reached_distance_limit = True
+
+                segment_records.append(
+                    dict(
+                        ray_index=idx,
+                        block=current_block,
+                        direction_xz=direction_xz,
+                        segment_start=np.asarray(segment_start, dtype=np.float32),
+                        segment_end=np.asarray(segment_end, dtype=np.float32),
+                        segment_end_xz=np.asarray(segment_end_xz, dtype=np.float32),
+                        segment_direction=segment_vector / max(segment_length, 1e-6),
+                        segment_length=float(segment_length),
+                        reached_distance_limit=reached_distance_limit,
+                    )
+                )
+
+            if not segment_records:
+                continue
+
+            records_by_block: dict[object, list[int]] = {}
+            for record_index, record in enumerate(segment_records):
+                records_by_block.setdefault(record["block"], []).append(record_index)
+
+            wall_hits = [None] * len(segment_records)
+            for block, record_indices in records_by_block.items():
+                block_records = [segment_records[record_index] for record_index in record_indices]
+                block_hits = self._cast_block_wall_hits(
+                    block,
+                    np.asarray([record["segment_start"] for record in block_records], dtype=np.float32),
+                    np.asarray([record["segment_direction"] for record in block_records], dtype=np.float32),
+                    np.asarray([record["segment_length"] for record in block_records], dtype=np.float32),
+                )
+                for record_index, wall_hit in zip(record_indices, block_hits):
+                    wall_hits[record_index] = wall_hit
+
+            for record_index, record in enumerate(segment_records):
+                idx = int(record["ray_index"])
+                if not active[idx]:
+                    continue
+
+                wall_hit = wall_hits[record_index]
+                if wall_hit is not None:
+                    total_distances[idx] += float(wall_hit["distance"])
+                    final_points[idx] = np.asarray(wall_hit["position"], dtype=np.float32)
+                    final_modes[idx] = "grid_wall"
+                    ray_paths[idx].append(final_points[idx])
+                    active[idx] = False
+                    continue
+
+                total_distances[idx] += float(record["segment_length"])
+                final_points[idx] = np.asarray(record["segment_end"], dtype=np.float32)
+                ray_paths[idx].append(final_points[idx])
+
+                if record["reached_distance_limit"]:
+                    final_modes[idx] = "grid_open"
+                    total_distances[idx] = Car.LASER_MAX_DISTANCE
+                    active[idx] = False
+                    continue
+
+                direction_xz = record["direction_xz"]
+                lookup_xz = record["segment_end_xz"] + direction_xz * self.SURFACE_TRAVERSAL_EPS
+                current_block = record["block"]
+                lookup_point = current_block.road_point_at(
+                    lookup_xz[0],
+                    lookup_xz[1],
+                    lift=0.0,
+                )
+                next_block = self.game_map.find_connected_block_for_point(
+                    lookup_point,
+                    from_block=current_block,
+                )
+                if next_block is None:
+                    next_cell = self.game_map.point_to_xz_cell(lookup_point)
+                    final_modes[idx] = (
+                        "grid_blocked_transition"
+                        if self.game_map.blocks_at_xz_cell(*next_cell)
+                        else "grid_gap"
+                    )
+                    active[idx] = False
+                    continue
+
+                current_xzs[idx] = lookup_xz.astype(np.float32)
+                current_blocks[idx] = next_block
+
+        for idx in range(Car.NUM_LASERS):
+            if active[idx]:
+                final_modes[idx] = "grid_open"
+
+            clamped_distance = min(float(total_distances[idx]), Car.LASER_MAX_DISTANCE)
+            self.intersections[idx] = np.asarray(final_points[idx], dtype=np.float32)
+            self.distances[idx] = clamped_distance
+            self.ray_paths[idx] = ray_paths[idx]
+            self.ray_debug_modes[idx] = final_modes[idx]
+            self.laser_surface_lengths[idx] = clamped_distance
+            self.laser_elevation_deltas[idx] = float(final_points[idx][1] - start_lifted[1])
+            if clamped_distance > 1e-6:
+                self.laser_elevation_rates[idx] = float(
+                    self.laser_elevation_deltas[idx] / clamped_distance
+                )
+            else:
+                self.laser_elevation_rates[idx] = 0.0
+
     def find_closest_intersections(self):
         if self.vertical_mode:
-            self._find_surface_intersections()
+            if not self._vertical_lidar_needed():
+                self._find_flat_intersections()
+                return
+            self._find_block_grid_intersections()
         else:
             self._find_flat_intersections()
                 
@@ -876,6 +1256,7 @@ class Car:
         self.surface_support_normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
         self.surface_support_face_index = -1
         self.surface_forward = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        self.surface_support_block = None
         self.support_valid = False
 
         self.last_position = self.position
@@ -889,6 +1270,8 @@ class Car:
         self.laser_elevation_rates = np.zeros(Car.NUM_LASERS, dtype=np.float32)
         self.laser_elevation_deltas = np.zeros(Car.NUM_LASERS, dtype=np.float32)
         self.laser_surface_lengths = np.zeros(Car.NUM_LASERS, dtype=np.float32)
+        self.next_surface_instructions = [1.0 for _ in range(Car.SIGHT_TILES)]
+        self.next_height_instructions = [0.0 for _ in range(Car.SIGHT_TILES)]
 
     def generate_laser_directions(self, angle_range_degrees):
         """
@@ -905,31 +1288,39 @@ class Car:
         # Calculate the angular spacing between lasers
         angular_spacing = angle_range_radians / (Car.NUM_LASERS - 1)
 
-        if self.vertical_mode:
+        if self.vertical_mode and self.support_valid:
             rotation_axis = np.asarray(self.surface_support_normal, dtype=np.float32)
             front_direction = np.asarray(self.surface_forward, dtype=np.float32)
         else:
             rotation_axis = np.array([0.0, 1.0, 0.0], dtype=np.float32)
             front_direction = np.asarray(self.direction, dtype=np.float32)
+            front_direction = self._normalize_xz(front_direction)
+        if front_direction is None:
+            front_direction = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
-        # Generate unit vectors for laser directions
-        laser_directions = []
-        for i in range(Car.NUM_LASERS):
-            # Calculate the angle offset for this laser
-            angle_offset = i * angular_spacing - angle_range_radians / 2
+        rotation_axis = self._normalize(rotation_axis)
+        front_direction = self._normalize(front_direction)
+        if rotation_axis is None:
+            rotation_axis = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+        if front_direction is None:
+            front_direction = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
-            # Rotate the front direction vector by the angle offset to get the laser direction
-            rotation_matrix = trimesh.transformations.rotation_matrix(angle_offset, rotation_axis)
-            laser_direction = np.dot(rotation_matrix[:3, :3], front_direction)
-            if self.vertical_mode:
-                projected_direction = self._project_onto_plane(
-                    laser_direction,
-                    self.surface_support_normal,
-                )
-                if projected_direction is not None:
-                    laser_direction = projected_direction
+        angle_offsets = (
+            np.arange(Car.NUM_LASERS, dtype=np.float32) * float(angular_spacing)
+            - float(angle_range_radians) / 2.0
+        )
+        cos_values = np.cos(angle_offsets).reshape(-1, 1)
+        sin_values = np.sin(angle_offsets).reshape(-1, 1)
+        axis = np.asarray(rotation_axis, dtype=np.float32)
+        front = np.asarray(front_direction, dtype=np.float32)
 
-            # Add the laser direction to the list
-            laser_directions.append(laser_direction)
-        
-        self.rays_directions = laser_directions
+        # Rodrigues rotation for all laser angles at once. This avoids building a
+        # full 4x4 transform matrix for each ray every frame.
+        cross = np.cross(np.repeat(axis.reshape(1, 3), Car.NUM_LASERS, axis=0), front)
+        dot = float(np.dot(axis, front))
+        rotated = (
+            front.reshape(1, 3) * cos_values
+            + cross * sin_values
+            + axis.reshape(1, 3) * dot * (1.0 - cos_values)
+        )
+        self.rays_directions = [np.asarray(direction, dtype=np.float32) for direction in rotated]

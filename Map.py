@@ -2,11 +2,24 @@ import trimesh
 import numpy as np
 import trimesh.visual.color
 import time
+from pathlib import Path
+from SurfaceTypes import traction_for_surface_prefix
 
 MAP_BLOCK_SIZE = 32
 MAP_GROUND_LEVEL = -4*(MAP_BLOCK_SIZE // 2)
 
 class MapBlock:
+    SLOPE_SENSOR_CURTAIN_HEIGHT = 6.0
+
+    SURFACE_PREFIXES = (
+        "RoadTech",
+        "RoadDirt",
+        "PlatformIce",
+        "PlatformGrass",
+        "PlatformPlastic",
+        "PlatformDirt",
+    )
+
     direction_dictionary = {
         "N": 0,
         "E": 270,
@@ -38,21 +51,66 @@ class MapBlock:
         "Curve": (np.array([1, 0, 0]), np.array([0, 0, 1])),
     }
     
+    @classmethod
+    def _strip_surface_prefix(cls, block_name: str) -> tuple[str, str]:
+        for prefix in cls.SURFACE_PREFIXES:
+            if block_name.startswith(prefix):
+                return prefix, block_name[len(prefix):]
+        return "Unknown", block_name
+
+    @classmethod
+    def resolve_block_name(cls, raw_name: str) -> tuple[str, str, str, int]:
+        surface, shape_name = cls._strip_surface_prefix(raw_name)
+
+        if shape_name == "Base":
+            shape_name = "Straight"
+        elif shape_name == "Slope2Base":
+            shape_name = "SlopeBase2"
+
+        block_size = 1
+        semantic_name = shape_name
+        if semantic_name[-1:].isdigit():
+            block_size = int(semantic_name[-1])
+            semantic_name = semantic_name[:-1]
+
+        if semantic_name == "Base":
+            semantic_name = "Straight"
+
+        if semantic_name in {"Start", "Finish", "Checkpoint"}:
+            mesh_name = f"RoadTech{semantic_name}"
+        elif semantic_name == "Straight":
+            mesh_name = "RoadTechStraight"
+        elif semantic_name == "Curve":
+            mesh_name = f"RoadTechCurve{block_size}"
+        elif semantic_name == "SlopeBase":
+            mesh_name = "RoadTechSlopeBase" if block_size == 1 else f"RoadTechSlopeBase{block_size}"
+        else:
+            mesh_name = raw_name
+
+        mesh_path = Path("Meshes") / f"{mesh_name}.obj"
+        if not mesh_path.exists():
+            raise FileNotFoundError(
+                f"Could not resolve mesh for block '{raw_name}'. "
+                f"Tried '{mesh_path}'."
+            )
+
+        return mesh_name, semantic_name, surface, block_size
 
     def __init__(self, name: str, logical_position: tuple[int], direction: str) -> None:
 
         self.logical_position = np.array(logical_position)
         self.position = np.array([logical_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + logical_position[1] * MAP_BLOCK_SIZE // 4, logical_position[2] * MAP_BLOCK_SIZE])
+        self.raw_name = name
+        mesh_name, semantic_name, surface_name, block_size = self.resolve_block_name(name)
+        self.mesh_name = mesh_name
+        self.surface_name = surface_name
         
-        self.mesh = trimesh.load(f"Meshes/{name}.obj", force="mesh", process=True)
+        self.mesh = trimesh.load(f"Meshes/{mesh_name}.obj", force="mesh", process=True)
         
         # get block logical size
-        self.block_size = 1
-        if name[-1].isdigit():
-            self.block_size = int(name[-1])
-            name = name[:-1]
-        name = name.replace("RoadTech", "")
-        self.name = name 
+        self.block_size = block_size
+        name = semantic_name
+        self.name = semantic_name 
 
         self.color = [np.random.randint(0, 255) for _ in range(3)]
         
@@ -61,6 +119,7 @@ class MapBlock:
         rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [self.block_size/2 * MAP_BLOCK_SIZE, 0, self.block_size/2 * MAP_BLOCK_SIZE])
         self.mesh.apply_transform(rotation_matrix)
         self.mesh.apply_translation(self.position) 
+        self.bounds = np.asarray(self.mesh.bounds, dtype=np.float32)
          
         # center
         self.center_point = self.position + np.array([16, 0, 16])
@@ -70,9 +129,11 @@ class MapBlock:
         self.center_point[1] = self.position[1]
         self.center_point = np.array(self.center_point)
         
-        self.split_mesh_into_walls_and_road()
         self.calculate_in_out_points(name, direction)
         self.calculate_in_out_vectors(name, direction)        
+        self.split_mesh_into_walls_and_road()
+        self.fit_road_plane()
+        self.build_sensor_walls_mesh()
         self.generate_mesh_points()
 
         # color the mesh
@@ -171,9 +232,147 @@ class MapBlock:
                                     faces=self.mesh.faces[road_indices])
         self.road_mesh.remove_unreferenced_vertices()
 
+    def fit_road_plane(self):
+        if len(self.road_mesh.faces) == 0:
+            self.road_plane = (0.0, 0.0, float(self.position[1]))
+            self.road_normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+            return
+
+        normals = np.asarray(self.road_mesh.face_normals, dtype=np.float64)
+        mask = normals[:, 1] > 0.5
+        triangles = np.asarray(self.road_mesh.triangles[mask], dtype=np.float64)
+        if triangles.size == 0:
+            triangles = np.asarray(self.road_mesh.triangles, dtype=np.float64)
+        points = triangles.reshape(-1, 3)
+        if points.shape[0] < 3:
+            height = float(self.position[1])
+            self.road_plane = (0.0, 0.0, height)
+            self.road_normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+            return
+
+        design = np.column_stack([points[:, 0], points[:, 2], np.ones(points.shape[0])])
+        coeffs, *_ = np.linalg.lstsq(design, points[:, 1], rcond=None)
+        a, b, c = (float(coeffs[0]), float(coeffs[1]), float(coeffs[2]))
+        self.road_plane = (a, b, c)
+        normal = np.array([-a, 1.0, -b], dtype=np.float32)
+        normal_norm = float(np.linalg.norm(normal))
+        if normal_norm <= 1e-6:
+            normal = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+        else:
+            normal = normal / normal_norm
+        self.road_normal = normal
+
+    def build_sensor_walls_mesh(self):
+        # Keep the real wall mesh intact and add simple vertical side curtains only on
+        # slope blocks. The curtain bottom follows the road edge exactly; only the
+        # top helper edge is lifted, so the slope start/end heights remain unchanged.
+        self.sensor_walls_mesh = self.walls_mesh.copy()
+        curtain_mesh = self.build_slope_sensor_curtains()
+        if curtain_mesh is not None and len(curtain_mesh.faces) > 0:
+            self.sensor_walls_mesh += curtain_mesh
+        self.sensor_wall_ray_finder = None
+        if len(self.sensor_walls_mesh.faces) > 0:
+            self.sensor_wall_ray_finder = trimesh.ray.ray_triangle.RayMeshIntersector(
+                self.sensor_walls_mesh
+            )
+
+    def build_slope_sensor_curtains(self):
+        if self.name != "SlopeBase" or len(self.road_mesh.faces) == 0:
+            return None
+
+        direction_xz = np.asarray([self.out_vector[0], self.out_vector[2]], dtype=np.float64)
+        direction_norm = float(np.linalg.norm(direction_xz))
+        if direction_norm <= 1e-6:
+            return None
+        direction_xz /= direction_norm
+
+        edge_owner: dict[tuple[int, int], int] = {}
+        boundary_edges: list[tuple[int, int]] = []
+        for face in np.asarray(self.road_mesh.faces, dtype=np.int64):
+            for vertex_a, vertex_b in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                edge = tuple(sorted((int(vertex_a), int(vertex_b))))
+                if edge in edge_owner:
+                    edge_owner[edge] += 1
+                else:
+                    edge_owner[edge] = 1
+        for edge, owner_count in edge_owner.items():
+            if owner_count == 1:
+                boundary_edges.append(edge)
+
+        vertices: list[np.ndarray] = []
+        faces: list[list[int]] = []
+        for vertex_a, vertex_b in boundary_edges:
+            point_a = np.asarray(self.road_mesh.vertices[int(vertex_a)], dtype=np.float64)
+            point_b = np.asarray(self.road_mesh.vertices[int(vertex_b)], dtype=np.float64)
+            edge_xz = np.asarray([point_b[0] - point_a[0], point_b[2] - point_a[2]], dtype=np.float64)
+            edge_norm = float(np.linalg.norm(edge_xz))
+            if edge_norm <= 1e-6:
+                continue
+            edge_xz /= edge_norm
+
+            # Side edges run along the slope direction. Entry/exit edges run across the
+            # track width and must stay open so lasers can move to connected blocks.
+            if abs(float(np.dot(edge_xz, direction_xz))) < 0.75:
+                continue
+
+            half_height = self.SLOPE_SENSOR_CURTAIN_HEIGHT * 0.5
+            bottom_a = point_a + np.array([0.0, -half_height, 0.0], dtype=np.float64)
+            bottom_b = point_b + np.array([0.0, -half_height, 0.0], dtype=np.float64)
+            top_a = point_a + np.array([0.0, half_height, 0.0], dtype=np.float64)
+            top_b = point_b + np.array([0.0, half_height, 0.0], dtype=np.float64)
+            base_index = len(vertices)
+            vertices.extend([bottom_a, bottom_b, top_b, top_a])
+            faces.append([base_index, base_index + 1, base_index + 2])
+            faces.append([base_index, base_index + 2, base_index + 3])
+
+        if not vertices:
+            return None
+
+        curtain_mesh = trimesh.Trimesh(
+            vertices=np.asarray(vertices, dtype=np.float64),
+            faces=np.asarray(faces, dtype=np.int64),
+            process=False,
+        )
+        curtain_mesh.visual.face_colors = [255, 128, 0, 180]
+        return curtain_mesh
+
+    def road_height_at(self, x: float, z: float) -> float:
+        a, b, c = self.road_plane
+        return float(a * float(x) + b * float(z) + c)
+
+    def road_direction_for_xz(self, direction_xz) -> np.ndarray:
+        direction_xz = np.asarray(direction_xz, dtype=np.float32)
+        norm = float(np.linalg.norm(direction_xz))
+        if norm <= 1e-6:
+            return np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        direction_xz = direction_xz / norm
+        a, b, _ = self.road_plane
+        direction = np.array(
+            [direction_xz[0], a * direction_xz[0] + b * direction_xz[1], direction_xz[1]],
+            dtype=np.float32,
+        )
+        direction_norm = float(np.linalg.norm(direction))
+        if direction_norm <= 1e-6:
+            return np.array([direction_xz[0], 0.0, direction_xz[1]], dtype=np.float32)
+        return direction / direction_norm
+
+    def road_point_at(self, x: float, z: float, lift: float = 0.0) -> np.ndarray:
+        return np.array(
+            [float(x), self.road_height_at(x, z) + float(lift), float(z)],
+            dtype=np.float32,
+        )
+
+    def get_sensor_wall_ray_finder(self):
+        return self.sensor_wall_ray_finder
+
+    def get_sensor_walls_mesh(self):
+        return self.sensor_walls_mesh
 
     def get_mesh(self):
         return self.mesh
+
+    def get_bounds(self):
+        return self.bounds
     
     def get_road_mesh(self):
         return self.road_mesh
@@ -232,10 +431,11 @@ class Map:
                 elif "Finish" in block_name:
                     self.end_logical_position = logical_position
 
-        
+        self.generate_block_grid_index()
         self.construct_path()
         self.generate_map_mesh()
         self.generate_walls_mesh()
+        self.generate_sensor_walls_mesh()
         self.generate_road_mesh()
         self.generate_road_traversal_data()
         self.generate_path_mesh()
@@ -245,6 +445,112 @@ class Map:
         if middle:
             position += np.array([MAP_BLOCK_SIZE // 2, 0, MAP_BLOCK_SIZE // 2])
         return position
+
+    @staticmethod
+    def point_to_xz_cell(point) -> tuple[int, int]:
+        point = np.asarray(point, dtype=np.float32)
+        return int(np.floor(point[0] / MAP_BLOCK_SIZE)), int(np.floor(point[2] / MAP_BLOCK_SIZE))
+
+    def generate_block_grid_index(self):
+        self.block_grid_index: dict[tuple[int, int], list[MapBlock]] = {}
+        eps = 1e-5
+        for block in self.blocks.values():
+            bounds = np.asarray(block.get_bounds(), dtype=np.float64)
+            min_x = int(np.floor(bounds[0, 0] / MAP_BLOCK_SIZE))
+            max_x = int(np.floor((bounds[1, 0] - eps) / MAP_BLOCK_SIZE))
+            min_z = int(np.floor(bounds[0, 2] / MAP_BLOCK_SIZE))
+            max_z = int(np.floor((bounds[1, 2] - eps) / MAP_BLOCK_SIZE))
+            for cell_x in range(min_x, max_x + 1):
+                for cell_z in range(min_z, max_z + 1):
+                    self.block_grid_index.setdefault((cell_x, cell_z), []).append(block)
+
+    def blocks_at_xz_cell(self, cell_x: int, cell_z: int) -> list[MapBlock]:
+        return self.block_grid_index.get((int(cell_x), int(cell_z)), [])
+
+    @staticmethod
+    def _filter_blocks_containing_xz_point(
+        blocks: list[MapBlock],
+        point,
+        margin: float = 0.05,
+    ) -> list[MapBlock]:
+        point = np.asarray(point, dtype=np.float32)
+        containing_blocks: list[MapBlock] = []
+        for block in blocks:
+            bounds = block.get_bounds()
+            if (
+                bounds[0, 0] - margin <= point[0] <= bounds[1, 0] + margin
+                and bounds[0, 2] - margin <= point[2] <= bounds[1, 2] + margin
+            ):
+                containing_blocks.append(block)
+        return containing_blocks
+
+    @staticmethod
+    def _nearest_block_by_road_height(blocks: list[MapBlock], point) -> MapBlock | None:
+        if not blocks:
+            return None
+        point = np.asarray(point, dtype=np.float32)
+        reference_y = float(point[1])
+        return min(
+            blocks,
+            key=lambda block: abs(block.road_height_at(float(point[0]), float(point[2])) - reference_y),
+        )
+
+    def find_block_for_point(self, point, fallback_block: MapBlock | None = None) -> MapBlock | None:
+        point = np.asarray(point, dtype=np.float32)
+        cell = self.point_to_xz_cell(point)
+        candidates = self.blocks_at_xz_cell(*cell)
+        containing_candidates = self._filter_blocks_containing_xz_point(candidates, point)
+        if containing_candidates:
+            candidates = containing_candidates
+        if not candidates:
+            if fallback_block is None:
+                return None
+            bounds = fallback_block.get_bounds()
+            margin = 0.25
+            inside_fallback_xz = (
+                bounds[0, 0] - margin <= point[0] <= bounds[1, 0] + margin
+                and bounds[0, 2] - margin <= point[2] <= bounds[1, 2] + margin
+            )
+            return fallback_block if inside_fallback_xz else None
+        if fallback_block in candidates:
+            fallback_height = fallback_block.road_height_at(float(point[0]), float(point[2]))
+            if abs(fallback_height - float(point[1])) <= MAP_BLOCK_SIZE * 0.25:
+                return fallback_block
+        return self._nearest_block_by_road_height(candidates, point)
+
+    def find_connected_block_for_point(self, point, from_block: MapBlock | None) -> MapBlock | None:
+        point = np.asarray(point, dtype=np.float32)
+        candidates = self.blocks_at_xz_cell(*self.point_to_xz_cell(point))
+        containing_candidates = self._filter_blocks_containing_xz_point(candidates, point)
+        if containing_candidates:
+            candidates = containing_candidates
+        if not candidates:
+            return None
+        if from_block in candidates:
+            return from_block
+        connected_candidates = [
+            block
+            for block in candidates
+            if self.can_transition_between_blocks(from_block, block)
+        ]
+        return self._nearest_block_by_road_height(connected_candidates, point)
+
+    def cell_has_stacked_layers(
+        self,
+        cell_x: int,
+        cell_z: int,
+        height_threshold: float = 2.0,
+    ) -> bool:
+        candidates = self.blocks_at_xz_cell(cell_x, cell_z)
+        if len(candidates) < 2:
+            return False
+        sample_x = (int(cell_x) + 0.5) * MAP_BLOCK_SIZE
+        sample_z = (int(cell_z) + 0.5) * MAP_BLOCK_SIZE
+        heights = [
+            block.road_height_at(sample_x, sample_z)
+            for block in candidates
+        ]
+        return (max(heights) - min(heights)) > float(height_threshold)
 
         
     def construct_path(self):
@@ -273,9 +579,13 @@ class Map:
         
         print("Path constructed...")
         self.block_path = path
+        self.generate_block_path_transition_index()
         self.path_tiles = []
         self.path_instructions = []
+        self.path_surface_instructions = []
+        self.path_height_instructions = []
         self.block_path_instructions = []
+        self.block_path_surface_instructions = []
         for block_position in path:
             block = self.blocks[block_position]
             in_vector = block.in_vector
@@ -284,7 +594,9 @@ class Map:
             in_vector_2D = [in_vector[0], in_vector[2]]
             out_vector_2D = [out_vector[0], out_vector[2]]
             block_instruction = float(np.cross(in_vector_2D, out_vector_2D) * block.block_size)
+            block_surface_instruction = traction_for_surface_prefix(block.surface_name)
             self.block_path_instructions.append(block_instruction)
+            self.block_path_surface_instructions.append(block_surface_instruction)
 
             # Keep path instructions tile-aligned with path_tile_index.
             # Some blocks contribute two unique path tiles (for example Curve2/Curve3),
@@ -294,10 +606,52 @@ class Map:
                     continue
                 self.path_tiles.append(tile)
                 self.path_instructions.append(block_instruction)
+                self.path_surface_instructions.append(block_surface_instruction)
+        self.path_height_instructions = self.generate_path_height_instructions()
         print("Path tiles constructed...")
         print(self.path_instructions)
+        print("Surface instructions:", self.path_surface_instructions)
+        print("Height instructions:", self.path_height_instructions)
 
         print("Path length:", len(self.path_tiles))
+
+    def generate_block_path_transition_index(self):
+        self.block_path_index_by_position = {
+            tuple(position): index
+            for index, position in enumerate(self.block_path)
+        }
+        self.connected_block_positions = {
+            tuple(position): set()
+            for position in self.block_path
+        }
+        for current_position, next_position in zip(self.block_path, self.block_path[1:]):
+            current_key = tuple(current_position)
+            next_key = tuple(next_position)
+            self.connected_block_positions.setdefault(current_key, set()).add(next_key)
+            self.connected_block_positions.setdefault(next_key, set()).add(current_key)
+
+    def can_transition_between_blocks(self, from_block: MapBlock | None, to_block: MapBlock | None) -> bool:
+        if from_block is None or to_block is None:
+            return False
+        from_key = tuple(from_block.logical_position)
+        to_key = tuple(to_block.logical_position)
+        if from_key == to_key:
+            return True
+        return to_key in self.connected_block_positions.get(from_key, set())
+
+    def generate_path_height_instructions(self) -> list[float]:
+        if not self.path_tiles:
+            return []
+        instructions: list[float] = []
+        max_logical_delta = 2.0
+        for index, tile in enumerate(self.path_tiles):
+            if index >= len(self.path_tiles) - 1:
+                instructions.append(0.0)
+                continue
+            next_tile = self.path_tiles[index + 1]
+            delta_y = float(next_tile[1] - tile[1])
+            instructions.append(float(np.clip(delta_y / max_logical_delta, -1.0, 1.0)))
+        return instructions
 
     
     def estimated_path_lenght(self):
@@ -346,6 +700,13 @@ class Map:
         for block in self.blocks.values():
             scene.add_geometry(block.get_walls_mesh())
         self.walls_mesh = scene.dump(concatenate=True)
+
+    def generate_sensor_walls_mesh(self):
+        # Create the wall mesh used by the vertical-mode lidar.
+        scene = trimesh.Scene()
+        for block in self.blocks.values():
+            scene.add_geometry(block.get_sensor_walls_mesh())
+        self.sensor_walls_mesh = scene.dump(concatenate=True)
     
     def generate_road_mesh(self):
         # Create a mesh of the road
@@ -387,6 +748,9 @@ class Map:
     
     def get_walls_mesh(self):
         return self.walls_mesh
+
+    def get_sensor_walls_mesh(self):
+        return self.sensor_walls_mesh
     
     def get_road_mesh(self):
         return self.road_mesh

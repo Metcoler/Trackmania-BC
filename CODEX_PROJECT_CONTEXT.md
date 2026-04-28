@@ -93,6 +93,11 @@ Current observation layout:
 - `next_segment_heading_error`
 - `dt_ratio`
 - `FL/FR/RL/RR slip coefficients`
+- `5` `surface_instruction_*` traction estimates aligned with the path lookahead
+- `5` `height_instruction_*` values aligned with the path lookahead
+  - `0.0` means same height
+  - `+0.5` / `-0.5` means one logical height step up/down
+  - `+1.0` / `-1.0` means two or more logical height steps up/down
 - `longitudinal_accel`
 - `lateral_accel`
 - `yaw_rate`
@@ -100,7 +105,7 @@ Current observation layout:
 
 Current observation dimension:
 
-- `15 + 5 + 17 = 37`
+- `15 + 5 + 27 = 47`
 
 Current short-horizon settings:
 
@@ -110,52 +115,69 @@ Current short-horizon settings:
 Optional vertical-mode extension:
 
 - `vertical_mode=False`
-  - keeps the existing 2D observation unchanged at `37`
+  - uses the current 2D observation at `47`
   - uses the legacy flat wall-only lidar
 - `vertical_mode=True`
-  - keeps the same leading `37` features
+  - keeps the same leading `47` features
   - appends:
     - `vertical_speed`
     - `forward_y`
     - `support_normal_y`
     - `cross_slope`
     - `5` overlapping `surface_elevation_sector_*` features
-  - current vertical-mode observation dimension is `46`
+  - current vertical-mode observation dimension is `56`
 
 Current vertical-mode sensor semantics:
 
-- `Car.py` can now run in a surface-following lidar mode
-- the sensor first finds the local road support point/normal under the car
-- laser directions are rotated around the current support normal instead of only world `Y`
-- `Map.py` now also builds a welded `road_traversal_mesh`
-  - created from `road_mesh`
-  - vertices are merged with `merge_vertices(digits_vertex=3)` so seams between blocks share triangle adjacency
-- each laser now traverses the road exactly triangle-by-triangle instead of using fixed marching steps
-  - project the laser direction into the current triangle plane
-  - walk to that triangle's exit edge
-  - cross to the adjacent triangle through the shared edge
-  - stop early if a wall is hit before the exit edge
-- wall checks are still performed against `walls_mesh`
+- `Car.py` can run in a simplified block-grid surface-following lidar mode
+- the sensor first picks the current `MapBlock` from the car's X/Z grid cell and nearest fitted road plane height
+- if the upcoming `SIGHT_TILES + 1` path tiles have no height change and the current support plane is flat,
+  `vertical_mode=True` automatically uses the fast legacy flat wall raycast for that frame
+- each `MapBlock` fits its road surface as a simple plane `y = ax + bz + c`
+  - flat blocks become horizontal planes
+  - slope blocks become one sloped plate
+- on sloped blocks, laser directions are generated around the fitted road-plane normal and projected through the block-grid traversal
+- each laser walks from grid cell to grid cell instead of triangle to triangle
+  - within a cell, the ray follows the current block's fitted road plane at `surface_ray_lift`
+  - wall checks are performed only against that block's `sensor_walls_mesh`
+  - `sensor_walls_mesh` keeps the original wall mesh intact
+  - slope blocks add simple vertical side-curtain polygons along road boundary edges
+  - the curtains leave slope entry/exit open and only make the side catch surface taller
+  - transitions to another block are allowed only when those blocks are connected in the logical path
+  - if the ray exits the known block grid without a wall hit, the result is treated as `grid_gap`
+  - if the ray reaches `LASER_MAX_DISTANCE`, the result is `grid_open`
+  - if it hits padded block walls, the result is `grid_wall`
+  - if it tries to enter a non-connected neighboring block, the result is `grid_blocked_transition`
 - when `vertical_mode=False`, the old flat `walls_mesh`-only raycast remains active
-- `surface_step_size` is kept only for backward config compatibility; the exact triangle traversal no longer depends on fixed marching steps
+- `surface_step_size` is kept only for backward config compatibility; the active vertical sensor no longer uses fixed marching steps
 
 Current phased observation roadmap:
 
 - current 2D upgrade
   - add per-wheel slip coefficients
+  - add `5` compact future surface traction instructions:
+    - `RoadTech` / asphalt: `1.00`
+    - `PlatformGrass`: `0.70`
+    - `RoadDirt` / `PlatformDirt`: `0.50`
+    - `PlatformPlastic`: `0.75`
+    - `PlatformIce`: `0.05`
+    - `PlatformSnow`: `0.15` initial estimate
   - add compact temporal summary:
     - `longitudinal_accel`
     - `lateral_accel`
     - `yaw_rate`
     - `5` overlapping clearance-rate sectors derived from the lidar fan
+  - add compact future height instructions:
+    - `height_instruction_0..4`
+    - `+0.5/-0.5` for one logical level step
+    - `+1.0/-1.0` for two or more logical level steps
 - next 2D/surface-aware upgrade
-  - add ground contact material
   - add gear
   - add rpm
 - later 3D upgrade
   - current first 3D step
     - add toggleable `vertical_mode`
-    - add exact triangle-traversal surface-following lidar distances
+    - add block-grid surface-following lidar distances
     - add compact vertical block:
       - `vertical_speed`
       - `forward_y`
@@ -239,7 +261,7 @@ OpenPlanet plugin.
 Responsibilities:
 
 - opens TCP server on `127.0.0.1:9002`
-- streams 20 floats every Trackmania frame
+- streams 37 floats every Trackmania frame
 - includes:
   - speed
   - side speed
@@ -251,6 +273,9 @@ Responsibilities:
   - direction vector
   - game time
   - FL/FR/RL/RR slip coefficients
+  - FL/FR/RL/RR ground material diagnostics
+  - FL/FR/RL/RR icing and dirt diagnostics
+  - wetness
 
 This is the root of the live runtime data stream.
 
@@ -264,9 +289,11 @@ Responsibilities:
 - keep latest packet only
 - derive map/path progress
 - derive future path instructions
+- derive future surface traction instructions
+- derive future height-change instructions
 - compute signed heading errors for the current and next future path segment
 - compute lidar-style laser distances against map walls
-- in `vertical_mode`, compute exact surface-following laser distances over welded road triangles
+- in `vertical_mode`, compute block-grid surface-following laser distances over fitted block road planes
 - expose support-normal / slope debug data for the observation encoder and vizualizer
 
 Important implementation detail:
@@ -283,8 +310,10 @@ Responsibilities:
 - instantiate mesh blocks from `Meshes/*.obj`
 - construct the logical path from start to finish
 - expand block-level turn semantics into tile-aligned `path_instructions`
+- expand block-level surface semantics into tile-aligned `path_surface_instructions`
+- expand tile-level height deltas into tile-aligned `path_height_instructions`
 - provide road mesh and wall mesh for geometry queries
-- provide welded road traversal data for exact triangle-to-triangle 3D laser walking
+- provide fitted road planes, X/Z block-grid lookup, logical path block transitions, and per-block sensor walls/side curtains for 3D laser walking
 
 ### `ObservationEncoder.py`
 
@@ -294,6 +323,8 @@ Responsibilities:
 
 - standardize distances and motion values
 - standardize per-wheel slip coefficients
+- standardize future surface traction instructions
+- standardize future height-change instructions
 - derive compact temporal motion features from previous vs current frame
 - optionally append compact vertical terrain features in `vertical_mode`
 - compute `dt_ratio = dt / dt_ref`

@@ -65,6 +65,8 @@ class RacingGameEnviroment(gym.Env):
         # [lasers N] + [path instructions M] +
         # [speed, side_speed, segment_heading_error, next_segment_heading_error, dt_ratio,
         #  slip_fl, slip_fr, slip_rl, slip_rr,
+        #  surface_instruction_0..4,
+        #  height_instruction_0..4,
         #  longitudinal_accel, lateral_accel, yaw_rate,
         #  clearance_rate_sector_0..4]
         # optional vertical block (when vertical_mode=True):
@@ -357,10 +359,9 @@ class RacingGameEnviroment(gym.Env):
                 elif (current_time - float(self._stuck_since_time)) >= self.stuck_timeout_duration:
                     self.controller.reset()
                     self.controller.update()
-                    self.race_terminated = 0
-                    truncated = True
+                    self.race_terminated = -1
                     reward = 0
-                    info["timeout_reason"] = "stuck_after_progress"
+                    info["touch_reason"] = "stuck_after_progress"
                     info["touch_count"] = int(self.touch_count)
                     print(self.current_step, ":", info["speed"], " "*20,  end='\r')
                     return observation, reward, done, truncated, info

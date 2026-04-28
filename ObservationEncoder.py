@@ -17,6 +17,12 @@ class ObservationEncoder:
         "slip_rl",
         "slip_rr",
     )
+    SURFACE_FEATURE_NAMES = tuple(
+        f"surface_instruction_{idx}" for idx in range(Car.SIGHT_TILES)
+    )
+    HEIGHT_FEATURE_NAMES = tuple(
+        f"height_instruction_{idx}" for idx in range(Car.SIGHT_TILES)
+    )
     TEMPORAL_FEATURE_NAMES = (
         "longitudinal_accel",
         "lateral_accel",
@@ -105,8 +111,16 @@ class ObservationEncoder:
         return cls.base_obs_dim() + len(cls.WHEEL_SLIP_FEATURE_NAMES)
 
     @classmethod
+    def surface_obs_dim(cls) -> int:
+        return cls.slip_obs_dim() + len(cls.SURFACE_FEATURE_NAMES)
+
+    @classmethod
+    def height_obs_dim(cls) -> int:
+        return cls.surface_obs_dim() + len(cls.HEIGHT_FEATURE_NAMES)
+
+    @classmethod
     def total_obs_dim(cls, vertical_mode: bool = False) -> int:
-        total = cls.base_obs_dim() + len(cls.WHEEL_SLIP_FEATURE_NAMES) + len(cls.TEMPORAL_FEATURE_NAMES)
+        total = cls.height_obs_dim() + len(cls.TEMPORAL_FEATURE_NAMES)
         if vertical_mode:
             total += len(cls.VERTICAL_FEATURE_NAMES)
         return total
@@ -118,6 +132,8 @@ class ObservationEncoder:
             + [f"path_instruction_{i}" for i in range(Car.SIGHT_TILES)]
             + list(cls.BASE_FEATURE_NAMES)
             + list(cls.WHEEL_SLIP_FEATURE_NAMES)
+            + list(cls.SURFACE_FEATURE_NAMES)
+            + list(cls.HEIGHT_FEATURE_NAMES)
             + list(cls.TEMPORAL_FEATURE_NAMES)
         )
         if vertical_mode:
@@ -136,6 +152,10 @@ class ObservationEncoder:
         offset = slices["base"].stop
         slices["slip"] = slice(offset, offset + len(cls.WHEEL_SLIP_FEATURE_NAMES))
         offset = slices["slip"].stop
+        slices["surface"] = slice(offset, offset + len(cls.SURFACE_FEATURE_NAMES))
+        offset = slices["surface"].stop
+        slices["height"] = slice(offset, offset + len(cls.HEIGHT_FEATURE_NAMES))
+        offset = slices["height"].stop
         slices["temporal"] = slice(offset, offset + len(cls.TEMPORAL_FEATURE_NAMES))
         offset = slices["temporal"].stop
         if vertical_mode:
@@ -185,7 +205,9 @@ class ObservationEncoder:
             [0.0] * Car.NUM_LASERS
             + [-1.0] * Car.SIGHT_TILES
             + [-1.0, -1.0, -1.0, -1.0, 0.0]
-            + [0.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
+            + [0.0] * len(self.WHEEL_SLIP_FEATURE_NAMES)
+            + [0.0] * len(self.SURFACE_FEATURE_NAMES)
+            + [-1.0] * len(self.HEIGHT_FEATURE_NAMES),
             dtype=np.float32,
         )
         temporal_low = np.array(
@@ -196,7 +218,9 @@ class ObservationEncoder:
             [1.0] * Car.NUM_LASERS
             + [1.0] * Car.SIGHT_TILES
             + [1.0, 1.0, 1.0, 1.0, self.dt_ratio_clip]
-            + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES),
+            + [1.0] * len(self.WHEEL_SLIP_FEATURE_NAMES)
+            + [1.0] * len(self.SURFACE_FEATURE_NAMES)
+            + [1.0] * len(self.HEIGHT_FEATURE_NAMES),
             dtype=np.float32,
         )
         temporal_high = np.array(
@@ -308,6 +332,18 @@ class ObservationEncoder:
             pad_value=0.0,
         )
         wheel_slips = np.clip(wheel_slips, 0.0, 1.0)
+        surface_instructions = self.fit_vector(
+            values=info.get("next_surface_instructions", [1.0 for _ in range(Car.SIGHT_TILES)]),
+            expected_size=len(self.SURFACE_FEATURE_NAMES),
+            pad_value=1.0,
+        )
+        surface_instructions = np.clip(surface_instructions, 0.0, 1.0)
+        height_instructions = self.fit_vector(
+            values=info.get("next_height_instructions", [0.0 for _ in range(Car.SIGHT_TILES)]),
+            expected_size=len(self.HEIGHT_FEATURE_NAMES),
+            pad_value=0.0,
+        )
+        height_instructions = np.clip(height_instructions, -1.0, 1.0)
         current_yaw = self._extract_yaw(info)
         current_clearance_windows = self._compute_clearance_windows(distances_vec)
 
@@ -407,6 +443,8 @@ class ObservationEncoder:
                 dtype=np.float32,
             ),
             wheel_slips.astype(np.float32, copy=False),
+            surface_instructions.astype(np.float32, copy=False),
+            height_instructions.astype(np.float32, copy=False),
             temporal_features,
         ]
         if self.vertical_mode:
@@ -444,6 +482,8 @@ class ObservationEncoder:
         slip_offset = slices["slip"].start
         x[slip_offset : slip_offset + 2] = x[slip_offset : slip_offset + 2][::-1]
         x[slip_offset + 2 : slip_offset + 4] = x[slip_offset + 2 : slip_offset + 4][::-1]
+        surface_slice = slices["surface"]
+        x[surface_slice] = x[surface_slice][::-1]
         temporal_offset = slices["temporal"].start
         lateral_accel_idx = temporal_offset + 1
         yaw_rate_idx = temporal_offset + 2
