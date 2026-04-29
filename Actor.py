@@ -35,7 +35,8 @@ class AttemptWriter:
 
     def __init__(self, base_dir: str, map_name: str, encoder: ObservationEncoder) -> None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_name = f"{timestamp}_map_{map_name}_target_dataset"
+        lidar_tag = "v3d" if encoder.vertical_mode else "v2d"
+        run_name = f"{timestamp}_map_{map_name}_{lidar_tag}_target_dataset"
         self.run_dir = os.path.join(base_dir, run_name)
         self.attempts_dir = os.path.join(self.run_dir, "attempts")
         os.makedirs(self.attempts_dir, exist_ok=False)
@@ -132,8 +133,13 @@ def rising_edge(current: int, previous: int) -> bool:
 if __name__ == "__main__":
     map_name = "small_map"
     #map_name = "AI Training #4"
+    vertical_mode = True
     base_dir = "logs/supervised_data"
-    encoder = ObservationEncoder(dt_ref=1.0 / 100.0, dt_ratio_clip=3.0)
+    encoder = ObservationEncoder(
+        dt_ref=1.0 / 100.0,
+        dt_ratio_clip=3.0,
+        vertical_mode=vertical_mode,
+    )
     writer = AttemptWriter(base_dir=base_dir, map_name=map_name, encoder=encoder)
 
     print(f"Saving supervised attempts into: {writer.run_dir}")
@@ -144,7 +150,7 @@ if __name__ == "__main__":
     print("- stop script with Ctrl+C")
 
     game_map = Map(map_name)
-    car = Car(game_map)
+    car = Car(game_map, vertical_mode=vertical_mode)
     controller = XboxControllerReader()
 
     attempt_index = 1

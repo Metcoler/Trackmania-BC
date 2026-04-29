@@ -26,7 +26,7 @@ def plot_map():
     scene.add_geometry(game_map.get_road_mesh())
     scene.add_geometry(game_map.get_path_line_mesh())
     scene.add_geometry(game_map.get_path_points_mesh())
-    scene.show(callback=callback_function)
+    scene.show(callback=callback_function, flags={"cull": False})
 
 
 def print_fps(frame: int):
@@ -272,8 +272,9 @@ if __name__ == "__main__":
     
     map_name = "surface_test"
     map_name = "height_test"
+    map_name = "pallete2"
     #map_name = "AI Training #5"
-    vizualize = False
+    vizualize = True
     vertical_mode = True
 
     game_map = Map(map_name)

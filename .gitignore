@@ -20,22 +20,6 @@ venv/
 Map Extractor C#/bin/
 Map Extractor C#/obj/
 
-# Local training outputs
-logs/PPO*
-
-# Large local training artifacts
-logs/sb3_runs/
-logs/rl_runs/
-logs/rl_live_stdout/
-logs/slope_debug/
-logs/surface_probe/
-logs/**/tensorboard/
-logs/**/*.zip
-logs/**/*.pt
-logs/**/*.pth
-logs/**/*.npz
-logs/**/*.npy
-logs/**/*.pkl
 
 # Local-only folders
 Bakal*/

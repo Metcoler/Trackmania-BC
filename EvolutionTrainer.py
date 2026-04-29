@@ -1361,7 +1361,7 @@ if __name__ == "__main__":
     hidden_dim = [32, 16]
     hidden_activation = ["relu", "tanh"]
     action_mode = "target"  # target / delta
-    vertical_mode = False
+    vertical_mode = True
 
     # Evolution
     pop_size = 32
@@ -1398,9 +1398,12 @@ if __name__ == "__main__":
     # Baseline run from scratch: stronger exploration first, then gradual annealing.
     
     # Train from checkpoint or supervised predtrainded model
-    initial_population_source: Optional[str] = (
-        r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
-    )
+    initial_population_source: Optional[str] = None
+    # Old v2d population checkpoints are intentionally not used as the default
+    # source anymore because the canonical training observation is now v3d.
+    # initial_population_source = (
+    #     r"logs/ga_runs\20260409_081105_map_AI_Training__5_v2d_h32x16_p32\checkpoints\population_gen_0190.npz"
+    # )
     # initial_population_source = r"logs/supervised_runs\20260317_123456_target_supervised\best_model.pt"
     seed_model_exact_copies = 2
     seed_model_mutation_probs = (0.015, 0.04, 0.08)

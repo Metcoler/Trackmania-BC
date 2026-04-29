@@ -15,6 +15,9 @@ from EvolutionPolicy import EvolutionPolicy
 from ObservationEncoder import ObservationEncoder
 
 
+DEFAULT_VERTICAL_MODE = True
+
+
 def choose_device() -> torch.device:
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -53,12 +56,13 @@ def find_attempt_files(base_dir: str = "logs/supervised_data") -> List[str]:
 
 
 def load_attempt(path: str) -> Dict[str, np.ndarray]:
-    encoder = ObservationEncoder()
+    encoder = ObservationEncoder(vertical_mode=DEFAULT_VERTICAL_MODE)
     expected_obs_dim = encoder.obs_dim
     base_obs_dim = encoder.base_obs_dim()
     slip_obs_dim = encoder.slip_obs_dim()
     surface_obs_dim = encoder.surface_obs_dim()
     height_obs_dim = encoder.height_obs_dim()
+    non_vertical_obs_dim = ObservationEncoder.total_obs_dim(vertical_mode=False)
     old_slip_temporal_obs_dim = slip_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
     old_surface_temporal_obs_dim = surface_obs_dim + len(ObservationEncoder.TEMPORAL_FEATURE_NAMES)
     with np.load(path) as data:
@@ -92,13 +96,14 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
                 axis=1,
             )
         elif observations.shape[1] >= height_obs_dim and observations.shape[1] < expected_obs_dim:
-            observations = observations[:, :height_obs_dim]
-            observations = np.pad(
-                observations,
-                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
-                mode="constant",
-                constant_values=0.0,
-            )
+            observations = observations[:, : min(observations.shape[1], non_vertical_obs_dim)]
+            if observations.shape[1] < non_vertical_obs_dim:
+                observations = np.pad(
+                    observations,
+                    ((0, 0), (0, non_vertical_obs_dim - observations.shape[1])),
+                    mode="constant",
+                    constant_values=0.0,
+                )
         elif observations.shape[1] >= surface_obs_dim and observations.shape[1] < height_obs_dim:
             observations = observations[:, :surface_obs_dim]
             observations = np.pad(
@@ -109,7 +114,7 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
             )
             observations = np.pad(
                 observations,
-                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
+                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
                 mode="constant",
                 constant_values=0.0,
             )
@@ -133,7 +138,7 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
             )
             observations = np.pad(
                 observations,
-                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
+                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
                 mode="constant",
                 constant_values=0.0,
             )
@@ -162,7 +167,7 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
             )
             observations = np.pad(
                 observations,
-                ((0, 0), (0, expected_obs_dim - height_obs_dim)),
+                ((0, 0), (0, non_vertical_obs_dim - height_obs_dim)),
                 mode="constant",
                 constant_values=0.0,
             )
@@ -171,6 +176,28 @@ def load_attempt(path: str) -> Dict[str, np.ndarray]:
                 f"Observation dim {observations.shape[1]} in {path} is smaller than "
                 f"the canonical base observation {base_obs_dim}."
             )
+        if observations.shape[1] < expected_obs_dim:
+            # New canonical supervised models use the 3D-compatible observation.
+            # Older flat datasets are still usable by appending neutral vertical
+            # terrain features: no vertical speed, flat forward/cross slope, and
+            # upright support normal.
+            missing = expected_obs_dim - observations.shape[1]
+            vertical_feature_count = len(ObservationEncoder.VERTICAL_FEATURE_NAMES)
+            if missing == vertical_feature_count:
+                neutral_vertical = np.zeros(
+                    (observations.shape[0], vertical_feature_count),
+                    dtype=np.float32,
+                )
+                support_normal_y_idx = 2
+                neutral_vertical[:, support_normal_y_idx] = 1.0
+                observations = np.concatenate([observations, neutral_vertical], axis=1)
+            else:
+                observations = np.pad(
+                    observations,
+                    ((0, 0), (0, missing)),
+                    mode="constant",
+                    constant_values=0.0,
+                )
         if observations.shape[1] > expected_obs_dim:
             observations = observations[:, :expected_obs_dim]
         return dict(
@@ -433,7 +460,8 @@ if __name__ == "__main__":
         persistent_workers=persistent_workers,
     )
 
-    run_name = datetime.now().strftime("%Y%m%d_%H%M%S") + "_target_supervised"
+    lidar_tag = "v3d" if DEFAULT_VERTICAL_MODE else "v2d"
+    run_name = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{lidar_tag}_target_supervised"
     run_dir = os.path.join(output_root, run_name)
     os.makedirs(run_dir, exist_ok=False)
     best_model_path = os.path.join(run_dir, "best_model.pt")
@@ -506,7 +534,10 @@ if __name__ == "__main__":
         "all_attempt_files": attempt_files,
         "dataset_stats": dataset_stats,
         "obs_dim": obs_dim,
-        "observation_layout": ObservationEncoder.feature_names(),
+        "observation_layout": ObservationEncoder.feature_names(
+            vertical_mode=DEFAULT_VERTICAL_MODE
+        ),
+        "vertical_mode": bool(DEFAULT_VERTICAL_MODE),
         "act_dim": act_dim,
         "hidden_dims": list(hidden_dims),
         "hidden_activation": hidden_activations[0] if len(hidden_activations) == 1 else list(hidden_activations),

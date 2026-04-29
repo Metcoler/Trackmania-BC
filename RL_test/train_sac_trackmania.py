@@ -23,29 +23,29 @@ from Enviroment import RacingGameEnviroment
 from Individual import Individual
 
 
-MAP_NAME = "small_map_test_2"
+MAP_NAME = "AI Training #5"
 EPISODES_TO_RUN = 5000
 TOTAL_TIMESTEPS = 20_000_000
-MAX_RUNTIME_HOURS = 0.5
-ENV_MAX_TIME = 30.0
+MAX_RUNTIME_HOURS = 0.75
+ENV_MAX_TIME = 45.0
 CHECKPOINT_EVERY_EPISODES = 50
 
-# Hybrid reward: sparse progress deltas during the run plus a dominant terminal
-# fitness reward using Individual.compute_scalar_fitness_for.
-REWARD_MODE = "terminal_fitness"
-PROGRESS_REWARD_INTERVAL_STEPS = 100
-PROGRESS_DELTA_SCALE = 0.10
+# Exact sparse shaping: each emitted reward is the delta of the same scalar
+# fitness score used for terminal_fitness, so the episode reward sums to the
+# final scaled fitness while still giving feedback when progress advances.
+REWARD_MODE = "fitness_delta"
 TERMINAL_FITNESS_SCALE = 1_000_000.0
 INITIAL_MODEL_PATH = (
     "logs/sb3_runs/"
-    "20260428_220423_sac_map_surface_test_2d_lidar_terminal_fitness_gas_brake_steer/"
+    "20260429_085707_sac_map_small_map_test_2_3d_lidar_terminal_fitness_gas_brake_steer/"
     "best_model.zip"
 )
 
 ACTION_LAYOUT = "gas_brake_steer"  # gas_steer / gas_brake_steer / throttle_steer / target_3d
-VERTICAL_MODE = False
+VERTICAL_MODE = True
 MAX_TOUCHES = 1
 START_IDLE_MAX_TIME = 2.0
+LOG_LIVE_RESETS = True
 
 SAC_LEARNING_RATE = 3e-4
 SAC_BUFFER_SIZE = 300_000
@@ -110,24 +110,20 @@ class TrackmaniaSB3Env(gym.Env):
         reward_mode: str,
         action_layout: str,
         env_max_time: float,
-        vertical_mode: bool = False,
+        vertical_mode: bool = True,
         max_touches: int = 1,
         start_idle_max_time: float = 2.0,
         terminal_fitness_scale: float = TERMINAL_FITNESS_SCALE,
-        progress_reward_interval_steps: int = PROGRESS_REWARD_INTERVAL_STEPS,
-        progress_delta_scale: float = PROGRESS_DELTA_SCALE,
     ) -> None:
         super().__init__()
         self.reward_mode = str(reward_mode).strip().lower()
         if self.reward_mode not in {
             "terminal_progress",
             "terminal_fitness",
-            "progress_delta",
-            "hybrid_progress_terminal_fitness",
+            "fitness_delta",
         }:
             raise ValueError(
-                "reward_mode must be terminal_progress, terminal_fitness, progress_delta, "
-                "or hybrid_progress_terminal_fitness."
+                "reward_mode must be terminal_progress, terminal_fitness, or fitness_delta."
             )
         self.action_layout = str(action_layout).strip().lower()
         if self.action_layout not in {"gas_steer", "gas_brake_steer", "throttle_steer", "target_3d"}:
@@ -158,22 +154,15 @@ class TrackmaniaSB3Env(gym.Env):
             )
         else:
             self.action_space = spaces.Box(
-                low=np.array([0.0, 0.0, -1.0], dtype=np.float32),
-                high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
-                dtype=np.float32,
-            )
+                    low=np.array([0.0, 0.0, -1.0], dtype=np.float32),
+                    high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
+                    dtype=np.float32,
+                )
         self.terminal_fitness_scale = float(terminal_fitness_scale)
-        self.progress_reward_interval_steps = max(1, int(progress_reward_interval_steps))
-        self.progress_delta_scale = float(progress_delta_scale)
-        self.prev_progress = 0.0
-        self.last_reward_progress = 0.0
-        self.steps_since_progress_reward = 0
+        self.last_fitness_delta_score = 0.0
+        self.last_fitness_delta_progress = 0.0
         self.last_info: Dict[str, Any] = {}
         self.episode_index = 0
-        self._defer_next_reset = False
-        self._pending_live_reset = False
-        self._reset_placeholder_obs: Optional[np.ndarray] = None
-        self._reset_placeholder_info: Dict[str, Any] = {}
 
     def _to_env_action(self, action: np.ndarray) -> np.ndarray:
         action = np.asarray(action, dtype=np.float32).reshape(-1)
@@ -236,34 +225,30 @@ class TrackmaniaSB3Env(gym.Env):
     ) -> tuple[float, Dict[str, float]]:
         metrics = self._terminal_metrics(info)
         progress = float(metrics["progress"])
-        progress_delta = max(0.0, progress - self.prev_progress)
-        self.prev_progress = max(self.prev_progress, progress)
-        self.steps_since_progress_reward += 1
 
         reward = 0.0
-        if self.reward_mode == "progress_delta":
-            reward = progress_delta
-        elif self.reward_mode == "hybrid_progress_terminal_fitness":
-            should_emit_progress_reward = (
-                self.steps_since_progress_reward >= self.progress_reward_interval_steps
+        if self.reward_mode == "fitness_delta":
+            scaled_fitness = float(metrics["fitness"]) / self.terminal_fitness_scale
+            should_emit_fitness_delta = (
+                progress > self.last_fitness_delta_progress + 1e-6
                 or terminated
                 or truncated
             )
-            if should_emit_progress_reward:
-                sparse_progress_delta = max(0.0, progress - self.last_reward_progress)
-                reward += sparse_progress_delta * self.progress_delta_scale
-                self.last_reward_progress = max(self.last_reward_progress, progress)
-                self.steps_since_progress_reward = 0
-            if terminated or truncated:
-                reward += float(metrics["fitness"]) / self.terminal_fitness_scale
+            if should_emit_fitness_delta:
+                reward = scaled_fitness - self.last_fitness_delta_score
+                self.last_fitness_delta_score = scaled_fitness
+                self.last_fitness_delta_progress = progress
         elif terminated or truncated:
             if self.reward_mode == "terminal_progress":
                 reward = progress
             elif self.reward_mode == "terminal_fitness":
                 reward = float(metrics["fitness"]) / self.terminal_fitness_scale
 
-        metrics["progress_delta"] = float(progress_delta)
-        metrics["last_reward_progress"] = float(self.last_reward_progress)
+        metrics["fitness_delta_score"] = float(
+            float(metrics["fitness"]) / self.terminal_fitness_scale
+        )
+        metrics["last_fitness_delta_score"] = float(self.last_fitness_delta_score)
+        metrics["last_fitness_delta_progress"] = float(self.last_fitness_delta_progress)
         metrics["reward"] = float(reward)
         return float(reward), metrics
 
@@ -271,29 +256,30 @@ class TrackmaniaSB3Env(gym.Env):
         obs, info = self.env.reset(seed=seed)
         while info.get("done", 0.0) != 0:
             obs, info = self.env.reset(seed=seed)
-        self.prev_progress = float(info.get("total_progress", 0.0))
-        self.last_reward_progress = self.prev_progress
-        self.steps_since_progress_reward = 0
+        reset_metrics = self._terminal_metrics(info)
+        self.last_fitness_delta_score = (
+            float(reset_metrics["fitness"]) / self.terminal_fitness_scale
+        )
+        self.last_fitness_delta_progress = float(reset_metrics["progress"])
         self.last_info = dict(info)
         self.episode_index += 1
-        self._pending_live_reset = False
-        self._reset_placeholder_obs = np.asarray(obs, dtype=np.float32).copy()
-        self._reset_placeholder_info = dict(info)
+        if LOG_LIVE_RESETS:
+            print(
+                "[SB3 SAC] live reset confirmed "
+                f"episode={self.episode_index} "
+                f"attempts={getattr(self.env, 'last_reset_attempts', '?')} "
+                f"reset_s={float(getattr(self.env, 'last_reset_seconds', 0.0)):.2f} "
+                f"time={float(info.get('time', 0.0)):.2f} "
+                f"progress={float(info.get('total_progress', 0.0)):.2f}% "
+                f"distance={float(info.get('distance', 0.0)):.2f}"
+            )
         return np.asarray(obs, dtype=np.float32), dict(info)
 
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None):
         super().reset(seed=seed)
-        if self._defer_next_reset and self._reset_placeholder_obs is not None:
-            self._defer_next_reset = False
-            self._pending_live_reset = True
-            info = dict(self._reset_placeholder_info)
-            info["deferred_live_reset"] = True
-            return self._reset_placeholder_obs.copy(), info
         return self._perform_live_reset(seed=seed)
 
     def step(self, action):
-        if self._pending_live_reset:
-            self._perform_live_reset()
         env_action = self._to_env_action(action)
         obs, _, done, truncated, info = self.env.step(env_action)
         race_term = int(getattr(self.env, "race_terminated", 0))
@@ -306,8 +292,6 @@ class TrackmaniaSB3Env(gym.Env):
         info["env_action"] = env_action.tolist()
         info["episode_metrics"] = metrics
         self.last_info = info
-        if terminated or truncated:
-            self._defer_next_reset = True
         return np.asarray(obs, dtype=np.float32), reward, terminated, truncated, info
 
     def close(self) -> None:
@@ -360,8 +344,9 @@ class EpisodeMetricsCallback:
             "time",
             "distance",
             "fitness",
-            "progress_delta",
-            "last_reward_progress",
+            "fitness_delta_score",
+            "last_fitness_delta_score",
+            "last_fitness_delta_progress",
             "episode_reward",
             "timesteps",
         ]
@@ -380,8 +365,9 @@ class EpisodeMetricsCallback:
             time=float(metrics.get("time", 0.0)),
             distance=float(metrics.get("distance", 0.0)),
             fitness=float(metrics.get("fitness", 0.0)),
-            progress_delta=float(metrics.get("progress_delta", 0.0)),
-            last_reward_progress=float(metrics.get("last_reward_progress", 0.0)),
+            fitness_delta_score=float(metrics.get("fitness_delta_score", 0.0)),
+            last_fitness_delta_score=float(metrics.get("last_fitness_delta_score", 0.0)),
+            last_fitness_delta_progress=float(metrics.get("last_fitness_delta_progress", 0.0)),
             episode_reward=episode_reward,
             timesteps=int(getattr(self.model, "num_timesteps", 0)) if self.model is not None else 0,
         )
@@ -484,8 +470,7 @@ def parse_args() -> argparse.Namespace:
         choices=[
             "terminal_progress",
             "terminal_fitness",
-            "progress_delta",
-            "hybrid_progress_terminal_fitness",
+            "fitness_delta",
         ],
     )
     parser.add_argument(
@@ -497,8 +482,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--activation-fn", default=SAC_ACTIVATION_FN, choices=["relu", "tanh", "elu", "leaky_relu"])
     parser.add_argument("--env-max-time", type=float, default=ENV_MAX_TIME)
     parser.add_argument("--checkpoint-every-episodes", type=int, default=CHECKPOINT_EVERY_EPISODES)
-    parser.add_argument("--progress-reward-interval-steps", type=int, default=PROGRESS_REWARD_INTERVAL_STEPS)
-    parser.add_argument("--progress-delta-scale", type=float, default=PROGRESS_DELTA_SCALE)
     parser.add_argument("--terminal-fitness-scale", type=float, default=TERMINAL_FITNESS_SCALE)
     parser.add_argument("--initial-model-path", default=INITIAL_MODEL_PATH)
     parser.add_argument("--device", default="cpu")
@@ -534,8 +517,6 @@ def main() -> None:
         max_touches=MAX_TOUCHES,
         start_idle_max_time=START_IDLE_MAX_TIME,
         terminal_fitness_scale=args.terminal_fitness_scale,
-        progress_reward_interval_steps=args.progress_reward_interval_steps,
-        progress_delta_scale=args.progress_delta_scale,
     )
     env = Monitor(raw_env, filename=monitor_path, info_keywords=("episode_metrics",))
 
@@ -550,8 +531,6 @@ def main() -> None:
         reward_mode=args.reward_mode,
         action_layout=args.action_layout,
         vertical_mode=VERTICAL_MODE,
-        progress_reward_interval_steps=int(args.progress_reward_interval_steps),
-        progress_delta_scale=float(args.progress_delta_scale),
         terminal_fitness_scale=float(args.terminal_fitness_scale),
         train_freq=list(SAC_TRAIN_FREQ),
         gradient_steps=SAC_GRADIENT_STEPS,

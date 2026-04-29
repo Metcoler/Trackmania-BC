@@ -18,6 +18,8 @@ class RacingGameEnviroment(gym.Env):
     RESET_CONFIRM_MAX_START_TIME_SECONDS = 0.75
     RESET_CONFIRM_MAX_START_DISTANCE = 5.0
     RESET_CONFIRM_MAX_START_SPEED = 8.0
+    RESET_PACKET_TIMEOUT_SECONDS = 0.10
+    FINISH_RESET_SETTLE_SECONDS = 0.5
 
     def __init__(
         self,
@@ -27,7 +29,7 @@ class RacingGameEnviroment(gym.Env):
         action_mode: str = "delta",
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
-        vertical_mode: bool = False,
+        vertical_mode: bool = True,
         surface_step_size: float = Car.SURFACE_STEP_SIZE,
         surface_probe_height: float = Car.SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = Car.SURFACE_RAY_LIFT,
@@ -131,6 +133,9 @@ class RacingGameEnviroment(gym.Env):
         self._stall_touch_latched = False
         self._wall_contact_since_time = None
         self._stuck_since_time = None
+        self.last_reset_attempts = 0
+        self.last_reset_seconds = 0.0
+        self._post_finish_reset_pending = False
         self.current_dt_ratio = 1.0
 
     def _clear_episode_runtime_state(self) -> None:
@@ -171,12 +176,20 @@ class RacingGameEnviroment(gym.Env):
         info,
         baseline_time: float | None,
         baseline_distance: float | None,
+        require_start_state: bool = False,
     ) -> bool:
         current_time = float(info.get("time", 0.0))
         if current_time < 0.0:
             return True
+        if float(info.get("done", 0.0)) == 1.0:
+            return False
 
-        if np.isfinite(current_time) and baseline_time is not None and np.isfinite(baseline_time):
+        if (
+            not require_start_state
+            and np.isfinite(current_time)
+            and baseline_time is not None
+            and np.isfinite(baseline_time)
+        ):
             if current_time < (float(baseline_time) - self.RESET_CONFIRM_MIN_TIME_DROP_SECONDS):
                 return True
 
@@ -207,39 +220,68 @@ class RacingGameEnviroment(gym.Env):
         baseline_time: float | None,
         baseline_distance: float | None,
         timeout_seconds: float,
+        require_start_state: bool = False,
     ):
         deadline = time.monotonic() + float(timeout_seconds)
         last_payload = None
         while time.monotonic() < deadline:
-            distances, instructions, info = self.observation_info()
+            remaining = max(0.0, deadline - time.monotonic())
+            payload = self.observation_info(
+                timeout_seconds=min(self.RESET_PACKET_TIMEOUT_SECONDS, remaining)
+            )
+            if payload is None:
+                continue
+            distances, instructions, info = payload
             last_payload = (distances, instructions, info)
             if self._is_reset_confirmed(
                 info=info,
                 baseline_time=baseline_time,
                 baseline_distance=baseline_distance,
+                require_start_state=require_start_state,
             ):
                 return distances, instructions, info
         return last_payload
 
-    def _reset_track_until_confirmed(self):
-        baseline_payload = self.observation_info()
-        baseline_distances, baseline_instructions, baseline_info = baseline_payload
-        baseline_time = float(baseline_info.get("time", 0.0))
-        baseline_distance = float(baseline_info.get("distance", 0.0))
-        if self._is_reset_confirmed(
-            info=baseline_info,
-            baseline_time=None,
-            baseline_distance=None,
-        ):
-            return baseline_distances, baseline_instructions, baseline_info
+    def _drain_post_finish_packets(self) -> None:
+        deadline = time.monotonic() + self.FINISH_RESET_SETTLE_SECONDS
+        while time.monotonic() < deadline:
+            self._neutralize_controller()
+            remaining = max(0.0, deadline - time.monotonic())
+            _ = self.observation_info(
+                timeout_seconds=min(self.RESET_PACKET_TIMEOUT_SECONDS, remaining)
+            )
+
+    def _reset_track_until_confirmed(self, post_finish: bool = False):
+        reset_started_at = time.monotonic()
+        self.last_reset_attempts = 0
+        self.last_reset_seconds = 0.0
+        if post_finish:
+            self._drain_post_finish_packets()
+
+        baseline_payload = self.observation_info(timeout_seconds=self.RESET_PACKET_TIMEOUT_SECONDS)
+        baseline_info = None if baseline_payload is None else baseline_payload[2]
+        baseline_time = None if baseline_info is None else float(baseline_info.get("time", 0.0))
+        baseline_distance = None if baseline_info is None else float(baseline_info.get("distance", 0.0))
+        if baseline_payload is not None and not post_finish:
+            baseline_distances, baseline_instructions, baseline_info = baseline_payload
+            if self._is_reset_confirmed(
+                info=baseline_info,
+                baseline_time=None,
+                baseline_distance=None,
+                require_start_state=False,
+            ):
+                self.last_reset_seconds = time.monotonic() - reset_started_at
+                return baseline_distances, baseline_instructions, baseline_info
 
         last_info = baseline_info
         for attempt in range(1, self.RESET_MAX_ATTEMPTS + 1):
+            self.last_reset_attempts = attempt
             self._press_restart_button()
             payload = self._wait_for_reset_confirmation(
                 baseline_time=baseline_time,
                 baseline_distance=baseline_distance,
                 timeout_seconds=self.RESET_CONFIRM_TIMEOUT_SECONDS,
+                require_start_state=post_finish,
             )
             if payload is not None:
                 distances, instructions, info = payload
@@ -248,7 +290,9 @@ class RacingGameEnviroment(gym.Env):
                     info=info,
                     baseline_time=baseline_time,
                     baseline_distance=baseline_distance,
+                    require_start_state=post_finish,
                 ):
+                    self.last_reset_seconds = time.monotonic() - reset_started_at
                     return distances, instructions, info
                 baseline_time = float(info.get("time", baseline_time))
                 baseline_distance = float(info.get("distance", baseline_distance))
@@ -256,6 +300,7 @@ class RacingGameEnviroment(gym.Env):
                 time.sleep(self.RESET_RETRY_COOLDOWN_SECONDS)
 
         last_time = None if last_info is None else float(last_info.get("time", float("nan")))
+        self.last_reset_seconds = time.monotonic() - reset_started_at
         raise RuntimeError(
             "Failed to confirm Trackmania reset after "
             f"{self.RESET_MAX_ATTEMPTS} B-button attempts; last observed time={last_time!r}."
@@ -264,8 +309,11 @@ class RacingGameEnviroment(gym.Env):
     
     def reset(self, seed=None):
         super().reset(seed=seed)
+        post_finish = bool(self._post_finish_reset_pending or self.race_terminated == 1)
+        self._neutralize_controller()
+        distances, instructions, info = self._reset_track_until_confirmed(post_finish=post_finish)
         self._clear_episode_runtime_state()
-        distances, instructions, info = self._reset_track_until_confirmed()
+        self._post_finish_reset_pending = False
         self.previous_observation = observation = self.build_observation(
             distances=distances,
             instructions=instructions,
@@ -317,6 +365,7 @@ class RacingGameEnviroment(gym.Env):
             self.controller.reset()
             self.controller.update()
             self.race_terminated = 1
+            self._post_finish_reset_pending = True
         elif (
             not timed_out
             and abs(float(info.get("segment_heading_error", 0.0))) > (2.0 / 3.0)
@@ -444,8 +493,8 @@ class RacingGameEnviroment(gym.Env):
         
         return observation, reward, done, truncated, info
 
-    def observation_info(self):
-        return self.car.get_data()
+    def observation_info(self, timeout_seconds: float | None = None):
+        return self.car.get_data(timeout_seconds=timeout_seconds)
 
     def build_observation(self, distances, instructions, info):
         observation = self.obs_encoder.build_observation(
@@ -527,8 +576,11 @@ class RacingGameEnviroment(gym.Env):
         self.controller.left_joystick_float(steer_angle, 0)
 
     def reset_game(self):
+        post_finish = bool(self._post_finish_reset_pending or self.race_terminated == 1)
+        self._neutralize_controller()
+        distances, instructions, info = self._reset_track_until_confirmed(post_finish=post_finish)
         self._clear_episode_runtime_state()
-        distances, instructions, info = self._reset_track_until_confirmed()
+        self._post_finish_reset_pending = False
         self.previous_observation_info = (distances, instructions, info)
         self.previous_observation = self.build_observation(
             distances=distances,

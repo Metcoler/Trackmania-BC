@@ -1,0 +1,35 @@
+{
+  "algorithm": "SAC",
+  "map_name": "height_test",
+  "initial_model_path": null,
+  "episodes_to_run": 5000,
+  "total_timesteps": 20000000,
+  "max_runtime_hours": 8.0,
+  "env_max_time": 60.0,
+  "reward_mode": "terminal_fitness",
+  "action_layout": "gas_brake_steer",
+  "vertical_mode": true,
+  "progress_reward_interval_steps": 100,
+  "progress_delta_scale": 0.1,
+  "terminal_fitness_scale": 1000000.0,
+  "train_freq": [
+    1,
+    "episode"
+  ],
+  "gradient_steps": 64,
+  "learning_rate": 0.0003,
+  "buffer_size": 300000,
+  "learning_starts": 1000,
+  "batch_size": 256,
+  "gamma": 0.995,
+  "tau": 0.005,
+  "ent_coef": "auto",
+  "policy_net_arch": [
+    128,
+    128
+  ],
+  "activation_fn": "relu",
+  "action_space": "Box([ 0.  0. -1.], 1.0, (3,), float32)",
+  "observation_space": "Box([ 0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0. -1. -1. -1.\n -1. -1. -1. -1. -1. -1.  0.  0.  0.  0.  0.  0.  0.  0.  0.  0. -1. -1.\n -1. -1. -1. -1. -1. -1. -1. -1. -1. -1. -1. -1. -1.  0. -1. -1. -1. -1.\n -1. -1.], [1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.\n 3. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.\n 1. 1. 1. 1. 1. 1. 1. 1.], (56,), float32)",
+  "device": "cpu"
+}

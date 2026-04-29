@@ -1,0 +1,6 @@
+#{"t_start": 1777445700.3727968, "env_id": "None"}
+r,l,t,episode_metrics
+-1000.0,288,9.099207,"{'term': -1.0, 'progress': 0.0, 'time': 2.6500000953674316, 'distance': 5.003087997436523, 'fitness': -1000000000.0, 'progress_delta': 0.0, 'last_reward_progress': 0.0, 'reward': -1000.0}"
+-1000.0,227,12.658201,"{'term': -1.0, 'progress': 0.0, 'time': 2.009999990463257, 'distance': 1.6508718729019165, 'fitness': -1000000000.0, 'progress_delta': 0.0, 'last_reward_progress': 0.0, 'reward': -1000.0}"
+-1000.0,241,16.311199,"{'term': -1.0, 'progress': 0.0, 'time': 2.059999942779541, 'distance': 4.254588603973389, 'fitness': -1000000000.0, 'progress_delta': 0.0, 'last_reward_progress': 0.0, 'reward': -1000.0}"
+1099.869839,820,31.472874,"{'term': 1.0, 'progress': 100.0, 'time': 13.529999732971191, 'distance': 161.1045379638672, 'fitness': 1099869838.895462, 'progress_delta': 0.0, 'last_reward_progress': 0.0, 'reward': 1099.869838895462}"

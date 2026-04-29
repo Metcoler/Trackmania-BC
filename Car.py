@@ -65,7 +65,7 @@ class Car:
     def __init__(
         self,
         game_map: Map,
-        vertical_mode: bool = False,
+        vertical_mode: bool = True,
         surface_step_size: float = SURFACE_STEP_SIZE,
         surface_probe_height: float = SURFACE_PROBE_HEIGHT,
         surface_ray_lift: float = SURFACE_RAY_LIFT,
@@ -103,13 +103,12 @@ class Car:
         self.laser_elevation_deltas = np.zeros(Car.NUM_LASERS, dtype=np.float32)
         self.laser_surface_lengths = np.zeros(Car.NUM_LASERS, dtype=np.float32)
 
-        self.last_position = self.position
-        self.last_direction = self.direction
+        self.last_position = np.array(self.position, dtype=np.float32)
+        self.last_direction = np.array(self.direction, dtype=np.float32)
 
         self.mesh = trimesh.creation.box(extents=[5, 1, 3], tag="car")
-        rotation_matrix = trimesh.geometry.align_vectors([1, 0, 0], self.direction)
-        self.mesh.apply_transform(rotation_matrix)
-        self.mesh.apply_translation(self.position)
+        self.base_mesh_vertices = np.asarray(self.mesh.vertices.copy(), dtype=np.float64)
+        self._apply_model_view_transform()
         self.mesh.visual.vertex_colors = [0, 0, 0]
 
         self.distances = [0 for _ in range(Car.NUM_LASERS)]
@@ -138,16 +137,25 @@ class Car:
     def get_mesh(self):
         return self.mesh
 
-    def update_model_view(self):
-        ## TODO Fix car mesh transformation bug
-        self.mesh.apply_translation(-self.last_position)
+    def _apply_model_view_transform(self):
+        direction = self._normalize(self.direction)
+        if direction is None:
+            direction = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        rotation_matrix = trimesh.geometry.align_vectors([1, 0, 0], direction)
+        translation_matrix = trimesh.transformations.translation_matrix(self.position)
+        transform = translation_matrix @ rotation_matrix
 
-        rotation_matrix = trimesh.geometry.align_vectors(self.last_direction, self.direction)
-        self.mesh.apply_transform(rotation_matrix)
-        self.mesh.apply_translation(self.position)
-        
-        self.last_position = self.position
-        self.last_direction = self.direction
+        local_vertices = np.asarray(self.base_mesh_vertices, dtype=np.float64)
+        homogeneous_vertices = np.column_stack(
+            [local_vertices, np.ones(len(local_vertices), dtype=np.float64)]
+        )
+        self.mesh.vertices[:] = (homogeneous_vertices @ transform.T)[:, :3]
+        self.mesh._cache.clear()
+
+    def update_model_view(self):
+        self._apply_model_view_transform()
+        self.last_position = np.array(self.position, dtype=np.float32)
+        self.last_direction = np.array(self.direction, dtype=np.float32)
     
     def update_camera(self, scene: trimesh.Scene):
         # Calculate the new direction of the camera
@@ -566,13 +574,19 @@ class Car:
                 time.sleep(1.0)
 
 
-    def get_data(self):
+    def get_data(self, timeout_seconds: float | None = None):
+        deadline = None
+        if timeout_seconds is not None:
+            deadline = time.perf_counter() + max(0.0, float(timeout_seconds))
+
         while True:
             with self.data_lock:
                 if self.data is not None and self.new_data:
                     data = self.data.copy()
                     self.new_data = False
                     break
+            if deadline is not None and time.perf_counter() >= deadline:
+                return None
             time.sleep(0.001)
 
         if data["time"] < 0:
@@ -1259,8 +1273,9 @@ class Car:
         self.surface_support_block = None
         self.support_valid = False
 
-        self.last_position = self.position
-        self.last_direction = self.direction
+        self.last_position = np.array(self.position, dtype=np.float32)
+        self.last_direction = np.array(self.direction, dtype=np.float32)
+        self._apply_model_view_transform()
 
         self.distances = [Car.LASER_MAX_DISTANCE for _ in range(Car.NUM_LASERS)]
         self.rays_directions = [[1, 0, 0] for _ in range(Car.NUM_LASERS)]

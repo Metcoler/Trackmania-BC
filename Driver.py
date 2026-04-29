@@ -228,7 +228,7 @@ def replay_population(
     max_touches: int = 1,
     never_quit: bool = True,
     action_mode: str = "delta",
-    vertical_mode: bool = False,
+    vertical_mode: bool = True,
     pause_between: bool = True,
     sort_by_fitness: bool = True,
     rank_start: int = 1,
@@ -421,7 +421,7 @@ def drive_model(
     max_touches: int = 1,
     never_quit: bool = True,
     action_mode: str = "target",
-    vertical_mode: bool = False,
+    vertical_mode: bool = True,
     target_steer_deadzone: float = 0.0,
 ) -> None:
     policy, extra = EvolutionPolicy.load(model_file, map_location="cpu")
@@ -496,7 +496,7 @@ if __name__ == "__main__":
     MAX_TOUCHES = 3
     NEVER_QUIT = True
     ACTION_MODE = "target"
-    VERTICAL_MODE = False
+    VERTICAL_MODE = True
     TARGET_STEER_DEADZONE = 0.05
     PAUSE_BETWEEN = False
 

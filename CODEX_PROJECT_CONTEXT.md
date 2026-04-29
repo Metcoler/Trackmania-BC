@@ -16,12 +16,11 @@ It summarizes:
 
 This repository implements an autonomous driving agent for Trackmania.
 
-There are currently two main learning paths in the codebase:
+There are currently three main learning paths in the codebase:
 
 - a Genetic Algorithm / neuroevolution path for live training in Trackmania
 - a supervised learning path that records player driving data and trains a torch policy offline
-
-The historical RL path is no longer active in the current workflow. Legacy RL reward code has been removed from `Enviroment.py`; the GA selection logic uses lexicographic metrics instead.
+- a Stable-Baselines3 SAC reinforcement-learning experiment path under `RL_test/`
 
 The project also contains Trackmania map extraction assets and an OpenPlanet plugin that streams game state over TCP to Python.
 
@@ -105,7 +104,17 @@ Current observation layout:
 
 Current observation dimension:
 
-- `15 + 5 + 27 = 47`
+- canonical/default training observation: `56`
+- legacy/debug flat observation: `47`
+
+Current canonical training standard:
+
+- new supervised data collection uses `vertical_mode=True`
+- new supervised models are trained against the 56-dim 3D-compatible observation
+- new GA runs/checkpoints use `vertical_mode=True`
+- new SAC/RL runs use `vertical_mode=True`
+- surface grip instructions are always part of the canonical observation
+- on all-asphalt maps the surface instructions naturally stay at `1.0`, which keeps the input compatible without needing a separate surface toggle
 
 Current short-horizon settings:
 
@@ -115,9 +124,11 @@ Current short-horizon settings:
 Optional vertical-mode extension:
 
 - `vertical_mode=False`
-  - uses the current 2D observation at `47`
+  - debug/performance fallback only
+  - uses the legacy flat observation at `47`
   - uses the legacy flat wall-only lidar
 - `vertical_mode=True`
+  - default/canonical mode for training and data collection
   - keeps the same leading `47` features
   - appends:
     - `vertical_speed`
@@ -150,6 +161,26 @@ Current vertical-mode sensor semantics:
   - if it tries to enter a non-connected neighboring block, the result is `grid_blocked_transition`
 - when `vertical_mode=False`, the old flat `walls_mesh`-only raycast remains active
 - `surface_step_size` is kept only for backward config compatibility; the active vertical sensor no longer uses fixed marching steps
+
+Supported height-changing road blocks:
+
+- `RoadTechSlopeBase`
+  - 1x1 straight slope, height delta `+1` logical level when driven low-to-high
+- `RoadTechSlopeBase2`
+  - 1x1 steeper straight slope, height delta `+2`
+- `RoadTechSlopeBase2x1`
+  - 1x2 gentler straight slope, height delta `+1`
+  - this uses a non-square footprint and has custom orientation handling in `MapBlock`
+- `RoadTechSlopeBaseCurve2Left` / `RoadTechSlopeBaseCurve2Right`
+  - 2x2 curve2 slope, height delta `+1`
+  - left/right variants preserve the usual curve instruction sign while also adding height instruction `+0.5`
+- `RoadTechSlope2BaseCurve2Left` / `RoadTechSlope2BaseCurve2Right`
+  - 2x2 curve2 slope, height delta `+2`
+  - height instruction reaches `+1.0`
+- entering any of these blocks from the opposite side uses `MapBlock.swap_in_out()`,
+  so the same metadata also supports downhill `-0.5` / `-1.0` height instructions
+- vertical-mode lidar adds side-curtain helper polygons for all slope-like blocks,
+  not only straight slopes; entry and exit edges remain open for connected block traversal
 
 Current phased observation roadmap:
 

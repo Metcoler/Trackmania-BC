@@ -39,7 +39,12 @@ class MapBlock:
         "Checkpoint": (np.array([0, 0, 0]), np.array([0, 0, 0])),
         "Straight": (np.array([0, 0, 0]), np.array([0, 0, 0])),
         "SlopeBase": (np.array([0, 0, 0]), np.array([0, 1, 0])),
+        "SlopeBase2x1": (np.array([0, 0, 0]), np.array([0, 1, 1])),
         "Curve": (np.array([0, 0, 0]), np.array([1, 0, 1])),
+        "SlopeBaseCurve2Right": (np.array([0, 0, 0]), np.array([1, 1, 1])),
+        "SlopeBaseCurve2Left": (np.array([1, 0, 0]), np.array([0, 1, 1])),
+        "Slope2BaseCurve2Right": (np.array([0, 0, 0]), np.array([1, 2, 1])),
+        "Slope2BaseCurve2Left": (np.array([1, 0, 0]), np.array([0, 2, 1])),
     }
 
     in_out_directions = {
@@ -48,8 +53,38 @@ class MapBlock:
         "Checkpoint": (np.array([0, 0, 1]), np.array([0, 0, 1])),
         "Straight": (np.array([0, 0, 1]), np.array([0, 0, 1])),
         "SlopeBase": (np.array([0, 0, 1]), np.array([0, 0, 1])),
+        "SlopeBase2x1": (np.array([0, 0, 1]), np.array([0, 0, 1])),
         "Curve": (np.array([1, 0, 0]), np.array([0, 0, 1])),
+        "SlopeBaseCurve2Right": (np.array([1, 0, 0]), np.array([0, 0, 1])),
+        "SlopeBaseCurve2Left": (np.array([-1, 0, 0]), np.array([0, 0, 1])),
+        "Slope2BaseCurve2Right": (np.array([1, 0, 0]), np.array([0, 0, 1])),
+        "Slope2BaseCurve2Left": (np.array([-1, 0, 0]), np.array([0, 0, 1])),
     }
+
+    SPECIAL_BLOCKS = {
+        "SlopeBase2x1": {
+            "block_size": 2,
+            "footprint": (1, 2),
+        },
+        "SlopeBaseCurve2Right": {
+            "block_size": 2,
+            "footprint": (2, 2),
+        },
+        "SlopeBaseCurve2Left": {
+            "block_size": 2,
+            "footprint": (2, 2),
+        },
+        "Slope2BaseCurve2Right": {
+            "block_size": 2,
+            "footprint": (2, 2),
+        },
+        "Slope2BaseCurve2Left": {
+            "block_size": 2,
+            "footprint": (2, 2),
+        },
+    }
+
+    EXACT_TILE_OFFSET_BLOCKS = set(SPECIAL_BLOCKS)
     
     @classmethod
     def _strip_surface_prefix(cls, block_name: str) -> tuple[str, str]:
@@ -59,13 +94,26 @@ class MapBlock:
         return "Unknown", block_name
 
     @classmethod
-    def resolve_block_name(cls, raw_name: str) -> tuple[str, str, str, int]:
+    def resolve_block_name(cls, raw_name: str) -> tuple[str, str, str, int, tuple[int, int]]:
         surface, shape_name = cls._strip_surface_prefix(raw_name)
 
         if shape_name == "Base":
             shape_name = "Straight"
         elif shape_name == "Slope2Base":
             shape_name = "SlopeBase2"
+
+        if shape_name in cls.SPECIAL_BLOCKS:
+            block_info = cls.SPECIAL_BLOCKS[shape_name]
+            block_size = int(block_info["block_size"])
+            footprint = tuple(int(value) for value in block_info["footprint"])
+            mesh_name = f"RoadTech{shape_name}"
+            mesh_path = Path("Meshes") / f"{mesh_name}.obj"
+            if not mesh_path.exists():
+                raise FileNotFoundError(
+                    f"Could not resolve mesh for block '{raw_name}'. "
+                    f"Tried '{mesh_path}'."
+                )
+            return mesh_name, shape_name, surface, block_size, footprint
 
         block_size = 1
         semantic_name = shape_name
@@ -94,14 +142,14 @@ class MapBlock:
                 f"Tried '{mesh_path}'."
             )
 
-        return mesh_name, semantic_name, surface, block_size
+        return mesh_name, semantic_name, surface, block_size, (block_size, block_size)
 
     def __init__(self, name: str, logical_position: tuple[int], direction: str) -> None:
 
         self.logical_position = np.array(logical_position)
         self.position = np.array([logical_position[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + logical_position[1] * MAP_BLOCK_SIZE // 4, logical_position[2] * MAP_BLOCK_SIZE])
         self.raw_name = name
-        mesh_name, semantic_name, surface_name, block_size = self.resolve_block_name(name)
+        mesh_name, semantic_name, surface_name, block_size, footprint_tiles = self.resolve_block_name(name)
         self.mesh_name = mesh_name
         self.surface_name = surface_name
         
@@ -109,6 +157,7 @@ class MapBlock:
         
         # get block logical size
         self.block_size = block_size
+        self.footprint_tiles = tuple(int(value) for value in footprint_tiles)
         name = semantic_name
         self.name = semantic_name 
 
@@ -116,14 +165,25 @@ class MapBlock:
         
         # update position
         angle = self.direction_dictionary[direction]
-        rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [self.block_size/2 * MAP_BLOCK_SIZE, 0, self.block_size/2 * MAP_BLOCK_SIZE])
+        footprint_center = [
+            self.footprint_tiles[0] * MAP_BLOCK_SIZE * 0.5,
+            0,
+            self.footprint_tiles[1] * MAP_BLOCK_SIZE * 0.5,
+        ]
+        rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], footprint_center)
         self.mesh.apply_transform(rotation_matrix)
-        self.mesh.apply_translation(self.position) 
+        self.mesh.apply_translation(self.position + self.non_square_rotation_correction(direction)) 
         self.bounds = np.asarray(self.mesh.bounds, dtype=np.float32)
          
         # center
-        self.center_point = self.position + np.array([16, 0, 16])
-        if self.block_size > 1:
+        self.center_point = self.position + np.array(
+            [
+                self.footprint_tiles[0] * MAP_BLOCK_SIZE * 0.5,
+                0,
+                self.footprint_tiles[1] * MAP_BLOCK_SIZE * 0.5,
+            ]
+        )
+        if self.footprint_tiles != (1, 1):
             self.center_point = self.mesh.centroid 
         self.center_point = list(self.center_point)
         self.center_point[1] = self.position[1]
@@ -140,11 +200,39 @@ class MapBlock:
         if name in MapBlock.block_colors:
             self.set_color(MapBlock.block_colors[name])
 
+    def non_square_rotation_correction(self, direction: str) -> np.ndarray:
+        if self.footprint_tiles[0] == self.footprint_tiles[1]:
+            return np.zeros(3, dtype=np.float64)
+
+        # The 2x1 slope mesh is authored as a one-tile-wide/two-tile-long north
+        # block. After a 90-degree rotation around its center, the long axis sits
+        # half a tile off the Trackmania grid. Shift it back onto full grid cells
+        # while keeping the logical in/out tile convention unchanged.
+        half_tile_delta = 0.5 * MAP_BLOCK_SIZE * (self.footprint_tiles[1] - self.footprint_tiles[0])
+        if self.name == "SlopeBase2x1" and direction in {"E", "W"}:
+            return np.array([half_tile_delta, 0.0, -half_tile_delta], dtype=np.float64)
+        return np.zeros(3, dtype=np.float64)
+
 
     def calculate_in_out_points(self, name, direction):
         # in and out points
-        self.in_tile, self.out_tile = self.in_out_tiles[name]
-        if "Slope" not in name:
+        pre_rotated_tile_offsets = False
+        if name == "SlopeBase2x1":
+            oriented_tiles = {
+                "N": (np.array([0, 0, 0]), np.array([0, 1, 1])),
+                "E": (np.array([1, 0, 0]), np.array([0, 1, 0])),
+                "S": (np.array([0, 0, 1]), np.array([0, 1, 0])),
+                "W": (np.array([0, 0, 0]), np.array([1, 1, 0])),
+            }
+            self.in_tile, self.out_tile = oriented_tiles[direction]
+            pre_rotated_tile_offsets = True
+        else:
+            self.in_tile, self.out_tile = self.in_out_tiles[name]
+
+        if name in self.EXACT_TILE_OFFSET_BLOCKS:
+            self.in_tile = list(self.in_tile) + [1]
+            self.out_tile = list(self.out_tile) + [1]
+        elif "Slope" not in name:
             self.in_tile = list(self.in_tile * (self.block_size-1)) + [1]
             self.out_tile = list(self.out_tile * (self.block_size-1)) + [1]
         else:
@@ -152,10 +240,19 @@ class MapBlock:
             self.out_tile = list(self.out_tile * (self.block_size)) + [1]
 
         angle = self.direction_dictionary[direction]
-        rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], [(self.block_size-1)/2, 0, (self.block_size-1)/2])
+        tile_rotation_center = [
+            (self.footprint_tiles[0] - 1) * 0.5,
+            0,
+            (self.footprint_tiles[1] - 1) * 0.5,
+        ]
+        rotation_matrix = trimesh.transformations.rotation_matrix(np.radians(angle), [0, 1, 0], tile_rotation_center)
 
-        self.in_tile = np.round(np.array(np.dot(rotation_matrix, self.in_tile)[:3])) + self.logical_position
-        self.out_tile = np.round(np.array(np.dot(rotation_matrix, self.out_tile)[:3])) + self.logical_position
+        if pre_rotated_tile_offsets:
+            self.in_tile = np.asarray(self.in_tile[:3], dtype=np.float64) + self.logical_position
+            self.out_tile = np.asarray(self.out_tile[:3], dtype=np.float64) + self.logical_position
+        else:
+            self.in_tile = np.round(np.array(np.dot(rotation_matrix, self.in_tile)[:3])) + self.logical_position
+            self.out_tile = np.round(np.array(np.dot(rotation_matrix, self.out_tile)[:3])) + self.logical_position
 
         self.in_point = np.array([16+self.in_tile[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + self.in_tile[1]*MAP_BLOCK_SIZE//4, 16+self.in_tile[2] * MAP_BLOCK_SIZE])
         self.out_point = np.array([16+self.out_tile[0] * MAP_BLOCK_SIZE, MAP_GROUND_LEVEL + self.out_tile[1]*MAP_BLOCK_SIZE//4, 16+self.out_tile[2] * MAP_BLOCK_SIZE])
@@ -230,6 +327,8 @@ class MapBlock:
         # Road - Create a new mesh with faces pointing in the y-axis direction
         self.road_mesh = trimesh.Trimesh(vertices=self.mesh.vertices,
                                     faces=self.mesh.faces[road_indices])
+        self.road_mesh.visual.vertex_colors = [95, 145, 95, 255]
+        self.road_mesh.visual.face_colors = [95, 145, 95, 255]
         self.road_mesh.remove_unreferenced_vertices()
 
     def fit_road_plane(self):
@@ -277,14 +376,8 @@ class MapBlock:
             )
 
     def build_slope_sensor_curtains(self):
-        if self.name != "SlopeBase" or len(self.road_mesh.faces) == 0:
+        if "Slope" not in self.name or len(self.road_mesh.faces) == 0:
             return None
-
-        direction_xz = np.asarray([self.out_vector[0], self.out_vector[2]], dtype=np.float64)
-        direction_norm = float(np.linalg.norm(direction_xz))
-        if direction_norm <= 1e-6:
-            return None
-        direction_xz /= direction_norm
 
         edge_owner: dict[tuple[int, int], int] = {}
         boundary_edges: list[tuple[int, int]] = []
@@ -310,9 +403,12 @@ class MapBlock:
                 continue
             edge_xz /= edge_norm
 
-            # Side edges run along the slope direction. Entry/exit edges run across the
-            # track width and must stay open so lasers can move to connected blocks.
-            if abs(float(np.dot(edge_xz, direction_xz))) < 0.75:
+            # Entry and exit edges are cross-track openings. Keep those open so
+            # grid traversal can move into connected blocks, and only add helper
+            # wall curtains along side boundaries. On curve-slope blocks the side
+            # boundary is a polyline, so a simple "parallel to slope direction"
+            # test is not sufficient.
+            if self._is_open_road_boundary_edge(point_a, point_b, edge_xz):
                 continue
 
             half_height = self.SLOPE_SENSOR_CURTAIN_HEIGHT * 0.5
@@ -335,6 +431,46 @@ class MapBlock:
         )
         curtain_mesh.visual.face_colors = [255, 128, 0, 180]
         return curtain_mesh
+
+    def _is_open_road_boundary_edge(self, point_a, point_b, edge_xz: np.ndarray) -> bool:
+        midpoint_xz = np.asarray(
+            [
+                0.5 * (float(point_a[0]) + float(point_b[0])),
+                0.5 * (float(point_a[2]) + float(point_b[2])),
+            ],
+            dtype=np.float64,
+        )
+
+        for opening_point, opening_vector in (
+            (self.in_point, self.in_vector),
+            (self.out_point, self.out_vector),
+        ):
+            direction_xz = np.asarray([opening_vector[0], opening_vector[2]], dtype=np.float64)
+            direction_norm = float(np.linalg.norm(direction_xz))
+            if direction_norm <= 1e-6:
+                continue
+            direction_xz /= direction_norm
+
+            # Opening edges run across the track, so they are roughly
+            # perpendicular to the local travel direction.
+            if abs(float(np.dot(edge_xz, direction_xz))) > 0.45:
+                continue
+
+            rel = midpoint_xz - np.asarray([opening_point[0], opening_point[2]], dtype=np.float64)
+            longitudinal_distance = abs(float(np.dot(rel, direction_xz)))
+            lateral_vector = rel - float(np.dot(rel, direction_xz)) * direction_xz
+            lateral_distance = float(np.linalg.norm(lateral_vector))
+            # The in/out point is stored at the center of the logical path tile,
+            # while the real mesh opening is on that tile boundary, roughly half
+            # a tile away. Keep that seam open, but do not swallow the curved
+            # side polyline where individual segments can point in many normals.
+            if (
+                longitudinal_distance <= MAP_BLOCK_SIZE * 0.65
+                and lateral_distance <= MAP_BLOCK_SIZE * 0.55
+            ):
+                return True
+
+        return False
 
     def road_height_at(self, x: float, z: float) -> float:
         a, b, c = self.road_plane
@@ -781,7 +917,7 @@ class Map:
         #scene.add_geometry(self.get_path_line_mesh())
         #scene.add_geometry(self.get_path_points_mesh())
            
-        scene.show()
+        scene.show(flags={"cull": False})
 
 
 

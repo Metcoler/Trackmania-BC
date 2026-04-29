@@ -58,7 +58,7 @@ class ObservationEncoder:
         surface_elevation_rate_abs_max: float = 0.35,
         dt_ref: float = 1.0 / 100.0,
         dt_ratio_clip: float = 3.0,
-        vertical_mode: bool = False,
+        vertical_mode: bool = True,
     ) -> None:
         self.laser_max_distance = float(laser_max_distance)
         self.path_instruction_abs_max = float(path_instruction_abs_max)

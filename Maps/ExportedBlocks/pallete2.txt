@@ -1,0 +1,7 @@
+RoadTechSlopeBaseCurve2Right;30,9,25;East
+RoadTechSlopeBase2x1;31,9,23;South
+RoadTechSlopeBaseCurve2Left;31,9,21;North
+RoadTechSlope2BaseCurve2Left;33,9,20;South
+RoadTechSlope2BaseCurve2Right;28,10,25;South
+RoadTechStart;28,12,24;North
+RoadTechFinish;34,11,19;South
